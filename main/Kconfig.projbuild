@@ -1,0 +1,27 @@
+menu "OpenClaw Stackchan"
+
+    config OPENCLAW_WIFI_SSID
+        string "WiFi SSID"
+        default "YOUR_WIFI_SSID"
+        help
+            WiFi SSID used by the firmware. Override locally with idf.py menuconfig
+            or sdkconfig before building.
+
+    config OPENCLAW_WIFI_PASSWORD
+        string "WiFi password"
+        default "YOUR_WIFI_PASSWORD"
+        help
+            WiFi password used by the firmware. Do not commit real credentials.
+
+    config OPENCLAW_TCP_HOST
+        string "OpenClaw TCP host"
+        default "127.0.0.1"
+        help
+            Host running the OpenClaw TCP bridge.
+
+    config OPENCLAW_TCP_PORT
+        int "OpenClaw TCP port"
+        default 8765
+        range 1 65535
+
+endmenu
