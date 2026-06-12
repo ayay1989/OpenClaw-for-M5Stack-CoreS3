@@ -6,8 +6,11 @@ Use this checklist before tagging or announcing a public release.
 
 - `LICENSE` is present and states GPL-3.0.
 - README is Chinese-first and explains the brain/body boundary.
+- README highlights firmware, Windows Bridge, OpenClaw tools, tactile feedback, face tracking, and memory boundaries.
+- Protocol governance is documented in `docs/protocol-governance.md`.
 - No real WiFi SSID, WiFi password, home IP, token, or private memory data is committed.
 - `windows_bridge/config.example.json` uses only local/example values.
+- `.gitignore` excludes local runtime config, event logs, Python caches, and ESP-IDF build outputs.
 
 ## Firmware
 
@@ -61,3 +64,10 @@ These require local hardware or services and cannot be fully proven by repositor
 - Real Windows camera face detection.
 - Real CoreS3 speaker PCM playback.
 - Real external pressure sensors, if added later.
+
+## Before Public Announcement
+
+- Run a secret scan for home WiFi, home IP, token, API key, and private memory terms.
+- Confirm GitHub default branch points to the intended release commit.
+- Create a hardware validation log when real CoreS3 testing is done.
+- Tag only after both no-hardware checks and real firmware build pass.

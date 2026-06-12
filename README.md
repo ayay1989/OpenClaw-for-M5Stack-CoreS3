@@ -1,10 +1,34 @@
-# OpenClaw Stackchan CoreS3 固件
+# OpenClaw StackChan CoreS3
 
-这是一个面向 **M5Stack CoreS3 / ESP32-S3** 的 ESP-IDF v5.x 固件，用来把 OpenClaw 接入 Stackchan 风格的桌面设备。
+让 **OpenClaw 成为大脑，StackChan/CoreS3 成为身体**。
 
-它通过 WiFi 作为 TCP Client 连接 OpenClaw，同时保留 UART0 CDC 串口调试；串口和 TCP 都使用“一行一个 JSON”的协议。设备可以显示表情、控制灯光、上报触摸/按键/心跳，并在硬件存在时控制 Stackchan 的头部舵机。
+这个仓库包含两部分：
+
+- **CoreS3 固件**：纯 C / ESP-IDF v5.x，运行在 M5Stack CoreS3 上，负责表情、灯光、触摸/压力、按键、心跳、舵机动作和可选 beep。
+- **Windows Bridge**：运行在 OpenClaw 所在的 Windows 电脑上，接收 CoreS3 TCP 连接，并给 OpenClaw、ASR、TTS、人脸追踪模块提供本机控制 API。
+
+它的目标不是把长期记忆塞进设备，而是让 OpenClaw 带着 Windows 电脑里的记忆“住进”StackChan：OpenClaw 思考、记忆、说话；StackChan 显示表情、转头、发光、感知触摸，并把身体事件送回 OpenClaw。
+
+## 亮点功能
+
+- **OpenClaw 大脑 / StackChan 身体分层**：OpenClaw 负责记忆、人格、ASR/TTS、人脸识别和决策；CoreS3 只做身体表现和短期状态。
+- **纯 ESP-IDF 固件**：不用 Arduino，不用 C++，适配 M5Stack CoreS3 / ESP32-S3。
+- **稳定 JSON 协议**：TCP 和串口都使用“一行一个 JSON”，方便调试和扩展。
+- **StackChan 表情与 presence 状态**：支持 8 个表情，以及 listening、thinking、speaking、sleeping、online idle 等身体状态。
+- **触摸/压力反馈**：CoreS3 触摸屏会派生 `pressure press/hold/release`，OpenClaw 可以知道“被摸到了”。
+- **动作与人脸追踪接口**：支持安全 yaw/pitch `look` 命令和 nod/shake/tilt/center 动作；Windows 侧提供可选 OpenCV 摄像头适配。
+- **语音对话骨架**：Windows 侧提供可插拔 ASR 输入、HTTP OpenClaw brain adapter、系统 TTS wrapper 和说话状态同步。
+- **OpenClaw 身体工具层**：提供 `self.emotion.*`、`self.motion.*`、`self.led.*`、`self.experience.*` 等可调用工具，避免上层拼低级命令。
+- **记忆边界清晰**：Windows/OpenClaw 可传短期 `memory_context`，CoreS3 不保存长期记忆、事实、总结或 embedding。
+- **无硬件验证**：提供 fake CoreS3、fake OpenClaw brain 和一键 no-hardware check，方便贡献者先跑通桥接层。
 
 稳定协议文档：[`docs/openclaw-stackchan-protocol.md`](docs/openclaw-stackchan-protocol.md)
+
+Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
+
+发布检查清单：[`docs/release-readiness-checklist.md`](docs/release-readiness-checklist.md)
+
+代码治理规则：[`docs/windows-bridge-code-governance.md`](docs/windows-bridge-code-governance.md)
 
 ## 项目目标
 
@@ -16,6 +40,8 @@
 - 触摸压力反馈第一版来自 CoreS3 触摸屏：按下、长按、松开都会上报 `pressure` 事件；后续可替换或叠加外壳压力传感器。
 
 ## 当前能力
+
+### CoreS3 固件
 
 - WiFi 自动连接与断线重连
 - TCP Client 自动连接 OpenClaw，断线后每 5 秒重试
@@ -32,6 +58,38 @@
 - 可选 Stackchan yaw/pitch 舵机动作
 - 可选实验 speaker beep
 - MCP 风格 JSON-RPC 工具发现与调用
+
+### Windows Bridge / OpenClaw 接入层
+
+- CoreS3 TCP server 和本机 HTTP 控制 API
+- 最近身体事件缓存与轮询
+- hello/heartbeat/pressure/gesture/button 事件处理
+- OpenClaw 可调用身体工具：表情、presence、LED、动作、beep、sleep、memory cue
+- 高层体验工具：开始说话、触摸回应、睡眠模式
+- 生命周期管理：睡眠/唤醒、主动回应、状态摘要
+- 对话循环骨架：ASR transcript source -> OpenClaw brain -> TTS -> StackChan presence
+- 可插拔 ASR：键盘模拟和外部命令输入
+- HTTP OpenClaw brain adapter 和 fake brain
+- Windows camera / OpenCV 人脸检测适配器
+- 语音时长估算和说话嘴型状态 cue
+- 本机控制 API token 保护和事件日志脱敏
+
+## 快速开始
+
+如果你只是想先看 OpenClaw/StackChan 桥接层能不能跑，不需要 CoreS3：
+
+```powershell
+python windows_bridge\tools\run_no_hardware_checks.py
+```
+
+如果你要接真机：
+
+1. 在 Windows 上启动 Bridge。
+2. 在 ESP-IDF `menuconfig` 中配置 WiFi 和 Windows 电脑局域网 IP。
+3. 编译并烧录 CoreS3 固件。
+4. 用串口或 Windows Bridge 查看 `hello`、`heartbeat`、`pressure` 等事件。
+
+详细步骤见下方“构建方式”和 [`windows_bridge/README.md`](windows_bridge/README.md)。
 
 ## 硬件目标
 
@@ -191,15 +249,31 @@ v1.0 完整验收清单见协议文档末尾。
 
 ## 当前不包含的功能
 
-- WebSocket
-- MQTT
-- TTS 流式播放
-- 麦克风输入
+- WebSocket / MQTT 通道
+- TTS PCM 流式播放到 CoreS3 speaker
+- 设备端麦克风输入
 - 唤醒词
 - 回声消除
-- 摄像头
+- CoreS3 上板摄像头
 - OTA
 - 设备端长期记忆存储
+
+Windows 侧已经提供 ASR、TTS、人脸追踪和 OpenClaw brain 的可扩展接口，但真实模型、真实麦克风、真实摄像头和真实 OpenClaw 记忆库需要在你的本地环境中接入。
+
+## 贡献与治理
+
+欢迎基于 GPL-3.0 继续改造。为了保持项目可维护，请遵守这些边界：
+
+- 不要把真实 WiFi、家庭 IP、token、私有记忆文件提交到仓库。
+- 新增设备命令时，先更新 [`docs/openclaw-stackchan-protocol.md`](docs/openclaw-stackchan-protocol.md)，再改固件和 Windows Bridge。
+- Windows 侧可复用逻辑放在 `windows_bridge/openclaw_bridge/`，示例脚本只做薄入口。
+- 长期记忆永远留在 OpenClaw/Windows 侧；CoreS3 只保存短期 resident/session 状态。
+- 能无硬件测试的能力，请补到 `tests/windows_bridge/` 并让 `run_no_hardware_checks.py` 覆盖。
+
+更完整的治理规则见：
+
+- [`docs/windows-bridge-code-governance.md`](docs/windows-bridge-code-governance.md)
+- [`docs/protocol-governance.md`](docs/protocol-governance.md)
 
 ## 许可证
 

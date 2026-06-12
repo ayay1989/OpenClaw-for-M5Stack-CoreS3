@@ -4,3 +4,10 @@ managed_components/
 dependencies.lock
 __pycache__/
 *.pyc
+*.jsonl
+*.log
+windows_bridge/config.local.json
+windows_bridge/*local*.json
+local_memory_context*.json
+.env
+.env.*
