@@ -8,10 +8,12 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 static const char *TAG = "lcd";
 static spi_device_handle_t s_lcd;
+static SemaphoreHandle_t s_lcd_lock;
 
 static void lcd_cmd(uint8_t cmd)
 {
@@ -63,6 +65,11 @@ static void lcd_set_window(int x0, int y0, int x1, int y1)
 
 esp_err_t lcd_init(void)
 {
+    s_lcd_lock = xSemaphoreCreateMutex();
+    if (s_lcd_lock == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
     uint64_t output_mask = (1ULL << CORES3_LCD_DC_GPIO);
     if (CORES3_LCD_RST_GPIO >= 0) {
         output_mask |= (1ULL << CORES3_LCD_RST_GPIO);
@@ -131,10 +138,12 @@ void lcd_fill_screen(uint16_t color)
     for (int x = 0; x < LCD_WIDTH; ++x) {
         line[x] = be;
     }
+    xSemaphoreTake(s_lcd_lock, portMAX_DELAY);
     lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
     for (int y = 0; y < LCD_HEIGHT; ++y) {
         lcd_data(line, LCD_WIDTH * sizeof(uint16_t));
     }
+    xSemaphoreGive(s_lcd_lock);
     heap_caps_free(line);
 }
 
@@ -162,6 +171,7 @@ void lcd_draw_rgb565_scaled_center(const uint16_t *pixels, int src_w, int src_h,
     int off_y = (LCD_HEIGHT - dst_h) / 2;
     uint16_t bg = __builtin_bswap16(bg_color);
 
+    xSemaphoreTake(s_lcd_lock, portMAX_DELAY);
     lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
     for (int y = 0; y < LCD_HEIGHT; ++y) {
         for (int x = 0; x < LCD_WIDTH; ++x) {
@@ -175,6 +185,7 @@ void lcd_draw_rgb565_scaled_center(const uint16_t *pixels, int src_w, int src_h,
         }
         lcd_data(line, LCD_WIDTH * sizeof(uint16_t));
     }
+    xSemaphoreGive(s_lcd_lock);
     heap_caps_free(line);
 }
 
@@ -190,6 +201,7 @@ void lcd_draw_rgb565_lines(lcd_line_renderer_t renderer, void *ctx)
         return;
     }
 
+    xSemaphoreTake(s_lcd_lock, portMAX_DELAY);
     lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
     for (int y = 0; y < LCD_HEIGHT; ++y) {
         renderer(y, line, LCD_WIDTH, ctx);
@@ -198,5 +210,6 @@ void lcd_draw_rgb565_lines(lcd_line_renderer_t renderer, void *ctx)
         }
         lcd_data(line, LCD_WIDTH * sizeof(uint16_t));
     }
+    xSemaphoreGive(s_lcd_lock);
     heap_caps_free(line);
 }

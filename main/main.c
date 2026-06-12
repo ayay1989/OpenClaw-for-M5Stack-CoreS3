@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -48,18 +47,25 @@
 static const char *TAG = "openclaw";
 static EventGroupHandle_t s_wifi_events;
 static SemaphoreHandle_t s_sock_lock;
+static SemaphoreHandle_t s_send_lock;
 static int s_sock = -1;
 
 #define WIFI_CONNECTED_BIT BIT0
 
 static void set_socket(int sock)
 {
+    if (s_send_lock != NULL) {
+        xSemaphoreTake(s_send_lock, portMAX_DELAY);
+    }
     xSemaphoreTake(s_sock_lock, portMAX_DELAY);
     if (s_sock >= 0 && s_sock != sock) {
         close(s_sock);
     }
     s_sock = sock;
     xSemaphoreGive(s_sock_lock);
+    if (s_send_lock != NULL) {
+        xSemaphoreGive(s_send_lock);
+    }
 }
 
 static bool socket_is_active(void)
@@ -89,23 +95,48 @@ static esp_err_t i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buffer, size_
 static void protocol_sender(const char *line, void *ctx)
 {
     (void)ctx;
+    if (line == NULL) {
+        return;
+    }
+
     printf("%s\n", line);
     fflush(stdout);
 
+    xSemaphoreTake(s_send_lock, portMAX_DELAY);
     xSemaphoreTake(s_sock_lock, portMAX_DELAY);
-    if (s_sock >= 0) {
-        char buffer[384];
-        int len = snprintf(buffer, sizeof(buffer), "%s\n", line);
-        if (len > 0 && len < (int)sizeof(buffer)) {
-            int err = send(s_sock, buffer, len, 0);
-            if (err < 0) {
-                ESP_LOGW(TAG, "tcp send failed: errno=%d", errno);
+    int sock = s_sock;
+    xSemaphoreGive(s_sock_lock);
+
+    if (sock >= 0) {
+        const char newline[] = "\n";
+        const char *chunks[] = {line, newline};
+        size_t chunk_lens[] = {strlen(line), 1};
+        bool failed = false;
+        for (size_t i = 0; i < sizeof(chunks) / sizeof(chunks[0]) && !failed; ++i) {
+            const char *ptr = chunks[i];
+            size_t left = chunk_lens[i];
+            while (left > 0) {
+                int sent = send(sock, ptr, left, 0);
+                if (sent <= 0) {
+                    ESP_LOGW(TAG, "tcp send failed: errno=%d", errno);
+                    failed = true;
+                    break;
+                }
+                ptr += sent;
+                left -= sent;
+            }
+        }
+
+        if (failed) {
+            xSemaphoreTake(s_sock_lock, portMAX_DELAY);
+            if (s_sock == sock) {
                 close(s_sock);
                 s_sock = -1;
             }
+            xSemaphoreGive(s_sock_lock);
         }
     }
-    xSemaphoreGive(s_sock_lock);
+    xSemaphoreGive(s_send_lock);
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -151,7 +182,7 @@ static esp_err_t wifi_init(void)
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "esp_wifi_set_mode failed");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config), TAG, "esp_wifi_set_config failed");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "esp_wifi_start failed");
-    ESP_LOGI(TAG, "WiFi connecting to SSID=%s", WIFI_SSID);
+    ESP_LOGI(TAG, "WiFi connecting to configured SSID");
     return ESP_OK;
 }
 
@@ -268,7 +299,11 @@ static void tcp_task(void *arg)
             .sin_family = AF_INET,
             .sin_port = htons(TCP_PORT),
         };
-        inet_pton(AF_INET, TCP_HOST, &dest.sin_addr);
+        if (inet_pton(AF_INET, TCP_HOST, &dest.sin_addr) != 1) {
+            ESP_LOGE(TAG, "TCP host must be a device-reachable IPv4 address: %s", TCP_HOST);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
 
         int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (sock < 0) {
@@ -289,10 +324,17 @@ static void tcp_task(void *arg)
             .tv_sec = 2,
             .tv_usec = 0,
         };
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) != 0 ||
+            setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) != 0) {
+            ESP_LOGW(TAG, "TCP timeout setup failed: errno=%d; reconnecting", errno);
+            close(sock);
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            continue;
+        }
 
         ESP_LOGI(TAG, "TCP connected");
         set_socket(sock);
+        protocol_emit_hello();
         line_len = 0;
 
         while (true) {
@@ -424,6 +466,8 @@ void app_main(void)
 
     s_sock_lock = xSemaphoreCreateMutex();
     ESP_ERROR_CHECK(s_sock_lock == NULL ? ESP_ERR_NO_MEM : ESP_OK);
+    s_send_lock = xSemaphoreCreateMutex();
+    ESP_ERROR_CHECK(s_send_lock == NULL ? ESP_ERR_NO_MEM : ESP_OK);
 
     protocol_init(protocol_sender, NULL);
     ESP_ERROR_CHECK(i2c_init_internal());
@@ -433,6 +477,7 @@ void app_main(void)
 
     emotion_draw("happy");
     led_set_breath(0, 100, 255, 3);
+    protocol_emit_hello();
 
     ESP_ERROR_CHECK(wifi_init());
     xTaskCreate(serial_task, "serial_task", 4096, NULL, 6, NULL);

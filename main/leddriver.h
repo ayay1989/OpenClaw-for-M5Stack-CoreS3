@@ -10,8 +10,8 @@
 #include "esp_err.h"
 
 #define CORES3_LED_GPIO 45  // ESP32-S3 compatible RMT GPIO for external NeoPixel/SK6812
-// NOTE: CoreS3 onboard SK6812 is behind AW9523 GPIO expander (I2C), not a direct GPIO.
-// This pin works with ESP32-S3 RMT TX; wire an external NeoPixel to it.
+// GPIO45 remains the known-good external NeoPixel/SK6812 output.
+// Stackchan/PY32 LED rings are optional and are driven over the internal I2C bus.
 
 typedef enum {
     LED_EFFECT_SOLID = 0,

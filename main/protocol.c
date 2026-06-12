@@ -13,6 +13,7 @@
 #include "leddriver.h"
 
 static const char *TAG = "protocol";
+static const char *FIRMWARE_VERSION = "0.3.0";
 static protocol_send_fn_t s_sender;
 static void *s_sender_ctx;
 
@@ -71,6 +72,10 @@ static void mcp_add_id(cJSON *payload, cJSON *id)
 static void mcp_send_payload(cJSON *payload)
 {
     cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        cJSON_Delete(payload);
+        return;
+    }
     cJSON_AddStringToObject(root, "type", "mcp");
     cJSON_AddItemToObject(root, "payload", payload);
     send_json(root);
@@ -166,13 +171,24 @@ static cJSON *mcp_schema_rgb(bool include_speed)
 static void mcp_handle_initialize(cJSON *id)
 {
     cJSON *result = cJSON_CreateObject();
+    if (result == NULL) {
+        return;
+    }
     cJSON_AddStringToObject(result, "protocolVersion", "2024-11-05");
     cJSON *capabilities = cJSON_CreateObject();
-    cJSON_AddItemToObject(capabilities, "tools", cJSON_CreateObject());
-    cJSON_AddItemToObject(result, "capabilities", capabilities);
+    cJSON *tools = cJSON_CreateObject();
     cJSON *server_info = cJSON_CreateObject();
+    if (capabilities == NULL || tools == NULL || server_info == NULL) {
+        cJSON_Delete(result);
+        cJSON_Delete(capabilities);
+        cJSON_Delete(tools);
+        cJSON_Delete(server_info);
+        return;
+    }
+    cJSON_AddItemToObject(capabilities, "tools", tools);
+    cJSON_AddItemToObject(result, "capabilities", capabilities);
     cJSON_AddStringToObject(server_info, "name", "openclaw-stackchan-cores3");
-    cJSON_AddStringToObject(server_info, "version", "0.2.0");
+    cJSON_AddStringToObject(server_info, "version", FIRMWARE_VERSION);
     cJSON_AddItemToObject(result, "serverInfo", server_info);
     mcp_send_result(id, result);
 }
@@ -274,8 +290,27 @@ static bool protocol_handle_mcp(cJSON *root)
         return false;
     }
 
+    cJSON *jsonrpc = cJSON_GetObjectItem(payload, "jsonrpc");
     cJSON *id = cJSON_GetObjectItem(payload, "id");
+    bool has_id = cJSON_HasObjectItem(payload, "id");
     const char *method = method_json->valuestring;
+
+    if (jsonrpc != NULL && (!cJSON_IsString(jsonrpc) || strcmp(jsonrpc->valuestring, "2.0") != 0)) {
+        if (has_id) {
+            mcp_send_error(id, -32600, "Invalid JSON-RPC version");
+        }
+        return true;
+    }
+
+    if (!has_id) {
+        if (strcmp(method, "notifications/initialized") == 0 || strcmp(method, "initialized") == 0) {
+            ESP_LOGI(TAG, "MCP initialized notification received");
+        } else {
+            ESP_LOGD(TAG, "Ignoring MCP notification method=%s", method);
+        }
+        return true;
+    }
+
     if (strcmp(method, "initialize") == 0) {
         mcp_handle_initialize(id);
     } else if (strcmp(method, "tools/list") == 0) {
@@ -369,6 +404,40 @@ void protocol_handle_line(const char *line, const char *source)
         send_error(action, "unknown action");
     }
 
+    cJSON_Delete(root);
+}
+
+void protocol_emit_hello(void)
+{
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        return;
+    }
+    cJSON_AddStringToObject(root, "type", "hello");
+    cJSON_AddStringToObject(root, "name", "openclaw-stackchan-cores3");
+    cJSON_AddStringToObject(root, "version", FIRMWARE_VERSION);
+
+    cJSON *features = cJSON_CreateObject();
+    cJSON *emotions = cJSON_CreateArray();
+    if (features == NULL || emotions == NULL) {
+        cJSON_Delete(root);
+        cJSON_Delete(features);
+        cJSON_Delete(emotions);
+        return;
+    }
+    cJSON_AddBoolToObject(features, "mcp", true);
+    cJSON_AddBoolToObject(features, "emotion", true);
+    cJSON_AddBoolToObject(features, "led", true);
+    cJSON_AddBoolToObject(features, "touch", true);
+    cJSON_AddBoolToObject(features, "gesture", true);
+    cJSON_AddItemToObject(root, "features", features);
+
+    for (size_t i = 0; i < g_emotion_count; ++i) {
+        cJSON_AddItemToArray(emotions, cJSON_CreateString(g_emotions[i].name));
+    }
+    cJSON_AddItemToObject(root, "emotions", emotions);
+
+    send_json(root);
     cJSON_Delete(root);
 }
 
