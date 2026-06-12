@@ -320,6 +320,7 @@ Bad JSON:
 
 Included in the current firmware/bridge contract:
 - WiFi/TCP/serial JSON.
+- Windows Bridge WebSocket API for home WiFi clients.
 - Fullscreen Stackchan-style emotions.
 - LED color and breathing.
 - Touch/gesture/button events.
@@ -329,7 +330,6 @@ Included in the current firmware/bridge contract:
 - Optional local beep.
 
 Planned future enhancements:
-- WebSocket transport.
 - MQTT event bus.
 - TTS PCM streaming to the CoreS3 speaker.
 - Optional device-side or external microphone input.

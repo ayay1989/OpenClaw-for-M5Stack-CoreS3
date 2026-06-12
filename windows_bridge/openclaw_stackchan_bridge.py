@@ -13,6 +13,8 @@ Windows machine with Python installed.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import socket
@@ -30,9 +32,11 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
 DEFAULT_CONTROL_HOST = "127.0.0.1"
 DEFAULT_CONTROL_PORT = 8766
+DEFAULT_WS_PORT = 8767
 MAX_QUEUED_COMMANDS = 100
 MAX_EVENTS = 300
 MAX_LINE_BUFFER = 65536
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 
 @dataclass
@@ -80,6 +84,8 @@ class StackChanBridge:
         auto_react: bool,
         event_log: str | None,
         control_token: str | None = None,
+        ws_host: str | None = None,
+        ws_port: int = DEFAULT_WS_PORT,
     ) -> None:
         self.host = host
         self.port = port
@@ -88,6 +94,8 @@ class StackChanBridge:
         self.auto_react = auto_react
         self.event_log = event_log
         self.control_token = control_token
+        self.ws_host = ws_host
+        self.ws_port = ws_port
 
         self.state = DeviceState()
         self._events: deque[BridgeEvent] = deque(maxlen=MAX_EVENTS)
@@ -100,6 +108,9 @@ class StackChanBridge:
         self._client: socket.socket | None = None
         self._connection_ready = False
         self._http_server: ThreadingHTTPServer | None = None
+        self._ws_server: socket.socket | None = None
+        self._ws_clients: set[socket.socket] = set()
+        self._ws_lock = threading.Lock()
         self._last_auto_reaction: dict[str, float] = {}
 
     def start(self) -> bool:
@@ -117,11 +128,17 @@ class StackChanBridge:
         if not self._start_control_server():
             server.close()
             return False
+        if not self._start_ws_server():
+            server.close()
+            self._stop_control_server()
+            return False
 
         threading.Thread(target=self._server_loop, args=(server,), name="tcp-server", daemon=True).start()
         threading.Thread(target=self._stdin_loop, name="stdin", daemon=True).start()
         print(f"[bridge] CoreS3 TCP listening on {self.host}:{self.port}")
         print(f"[bridge] local control API on http://{self.control_host}:{self.control_port}")
+        if self.ws_host:
+            print(f"[bridge] WebSocket API on ws://{self.ws_host}:{self.ws_port}/bridge")
         print("[bridge] commands: /help, /status, /emotion happy, /presence listening, /look 0 30, /motion nod, /quit")
         try:
             while not self._stop.is_set():
@@ -131,12 +148,14 @@ class StackChanBridge:
             self._stop.set()
         self._close_client()
         self._stop_control_server()
+        self._stop_ws_server()
         return True
 
     def stop(self) -> None:
         self._stop.set()
         self._close_client()
         self._stop_control_server()
+        self._stop_ws_server()
 
     def send_command(self, payload: dict[str, Any]) -> bool:
         with self._client_lock:
@@ -303,6 +322,222 @@ class StackChanBridge:
             self._http_server.server_close()
             self._http_server = None
 
+    def _start_ws_server(self) -> bool:
+        if not self.ws_host:
+            return True
+        if not self._host_is_local(self.ws_host) and not self.control_token:
+            print("[bridge] refusing remote WebSocket API without --control-token or OPENCLAW_BRIDGE_TOKEN")
+            return False
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server.bind((self.ws_host, self.ws_port))
+            server.listen(8)
+            server.settimeout(1.0)
+        except OSError as exc:
+            server.close()
+            print(f"[bridge] cannot start WebSocket API on {self.ws_host}:{self.ws_port}: {exc}")
+            return False
+        self._ws_server = server
+        threading.Thread(target=self._ws_server_loop, args=(server,), name="websocket-api", daemon=True).start()
+        return True
+
+    def _stop_ws_server(self) -> None:
+        if self._ws_server is not None:
+            try:
+                self._ws_server.close()
+            except OSError:
+                pass
+            self._ws_server = None
+        with self._ws_lock:
+            clients = list(self._ws_clients)
+            self._ws_clients.clear()
+        for client in clients:
+            try:
+                client.close()
+            except OSError:
+                pass
+
+    def _ws_server_loop(self, server: socket.socket) -> None:
+        while not self._stop.is_set():
+            try:
+                client, address = server.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                if not self._stop.is_set():
+                    print("[ws] accept failed")
+                return
+            threading.Thread(target=self._handle_ws_client, args=(client, address), name="websocket-client", daemon=True).start()
+
+    def _handle_ws_client(self, client: socket.socket, address: tuple[str, int]) -> None:
+        client.settimeout(1.0)
+        try:
+            request = self._recv_http_headers(client)
+            if not self._complete_ws_handshake(client, request):
+                client.close()
+                return
+            with self._ws_lock:
+                self._ws_clients.add(client)
+            self._ws_send_json(client, {"type": "welcome", "state": self.state.to_public_dict(), "events": self.recent_events(limit=20)})
+            print(f"[ws] client connected from {address[0]}:{address[1]}")
+            while not self._stop.is_set():
+                payload = self._ws_recv_text(client)
+                if payload is None:
+                    break
+                self._handle_ws_message(client, payload)
+        except OSError as exc:
+            print(f"[ws] client error: {exc}")
+        finally:
+            with self._ws_lock:
+                self._ws_clients.discard(client)
+            try:
+                client.close()
+            except OSError:
+                pass
+            print("[ws] client disconnected")
+
+    def _recv_http_headers(self, client: socket.socket) -> str:
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = client.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+            if len(data) > MAX_LINE_BUFFER:
+                break
+        return data.decode("utf-8", errors="replace")
+
+    def _complete_ws_handshake(self, client: socket.socket, request: str) -> bool:
+        lines = request.split("\r\n")
+        request_line = lines[0] if lines else ""
+        path = request_line.split(" ")[1] if len(request_line.split(" ")) >= 2 else "/"
+        headers: dict[str, str] = {}
+        for line in lines[1:]:
+            key, sep, value = line.partition(":")
+            if sep:
+                headers[key.strip().lower()] = value.strip()
+        key = headers.get("sec-websocket-key")
+        token = headers.get("x-openclaw-token") or self._query_value_from_path(path, "token")
+        if self.control_token and token != self.control_token:
+            client.sendall(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n")
+            return False
+        if not key:
+            client.sendall(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n")
+            return False
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode("ascii")).digest()).decode("ascii")
+        response = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {accept}\r\n"
+            "\r\n"
+        )
+        client.sendall(response.encode("ascii"))
+        return True
+
+    def _query_value_from_path(self, path: str, name: str) -> str | None:
+        if "?" not in path:
+            return None
+        query = path.split("?", 1)[1]
+        for pair in query.split("&"):
+            key, _, value = pair.partition("=")
+            if key == name:
+                return value
+        return None
+
+    def _handle_ws_message(self, client: socket.socket, payload: str) -> None:
+        try:
+            message = json.loads(payload)
+        except json.JSONDecodeError:
+            self._ws_send_json(client, {"ok": False, "error": "invalid JSON"})
+            return
+        if not isinstance(message, dict):
+            self._ws_send_json(client, {"ok": False, "error": "message must be an object"})
+            return
+        if message.get("type") == "ping":
+            self._ws_send_json(client, {"type": "pong", "time": time.time()})
+            return
+        result = self.handle_control_command(message)
+        self._ws_send_json(client, {"type": "command_result", **result})
+
+    def _broadcast_ws_event(self, event: BridgeEvent) -> None:
+        with self._ws_lock:
+            clients = list(self._ws_clients)
+        if not clients:
+            return
+        payload = {"type": "event", "event": self._redact_event(event).to_public_dict()}
+        for client in clients:
+            if not self._ws_send_json(client, payload):
+                with self._ws_lock:
+                    self._ws_clients.discard(client)
+                try:
+                    client.close()
+                except OSError:
+                    pass
+
+    def _ws_send_json(self, client: socket.socket, payload: dict[str, Any]) -> bool:
+        try:
+            body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            client.sendall(self._ws_frame(body))
+            return True
+        except OSError:
+            return False
+
+    def _ws_frame(self, payload: bytes) -> bytes:
+        length = len(payload)
+        if length < 126:
+            header = bytes([0x81, length])
+        elif length <= 65535:
+            header = bytes([0x81, 126]) + length.to_bytes(2, "big")
+        else:
+            header = bytes([0x81, 127]) + length.to_bytes(8, "big")
+        return header + payload
+
+    def _ws_recv_text(self, client: socket.socket) -> str | None:
+        header = self._recv_exact(client, 2)
+        if not header:
+            return None
+        first, second = header
+        opcode = first & 0x0F
+        masked = (second & 0x80) != 0
+        length = second & 0x7F
+        if length == 126:
+            ext = self._recv_exact(client, 2)
+            if not ext:
+                return None
+            length = int.from_bytes(ext, "big")
+        elif length == 127:
+            ext = self._recv_exact(client, 8)
+            if not ext:
+                return None
+            length = int.from_bytes(ext, "big")
+        if length > MAX_LINE_BUFFER:
+            return None
+        mask = self._recv_exact(client, 4) if masked else b""
+        payload = self._recv_exact(client, length)
+        if payload is None:
+            return None
+        if opcode == 0x8:
+            return None
+        if opcode == 0x9:
+            client.sendall(bytes([0x8A, 0]))
+            return ""
+        if opcode != 0x1:
+            return ""
+        if masked and mask:
+            payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        return payload.decode("utf-8", errors="replace")
+
+    def _recv_exact(self, client: socket.socket, length: int) -> bytes | None:
+        data = b""
+        while len(data) < length:
+            chunk = client.recv(length - len(data))
+            if not chunk:
+                return None
+            data += chunk
+        return data
+
     def _server_loop(self, server: socket.socket) -> None:
         with server:
             while not self._stop.is_set():
@@ -450,6 +685,7 @@ class StackChanBridge:
         event = BridgeEvent(timestamp=time.time(), kind=kind, message=message)
         with self._events_lock:
             self._events.append(event)
+        self._broadcast_ws_event(event)
         if self.event_log:
             try:
                 with open(self.event_log, "a", encoding="utf-8") as fh:
@@ -463,7 +699,10 @@ class StackChanBridge:
         return BridgeEvent(timestamp=event.timestamp, kind=event.kind, message=message)
 
     def _control_host_is_local(self) -> bool:
-        return self.control_host in {"127.0.0.1", "localhost", "::1"}
+        return self._host_is_local(self.control_host)
+
+    def _host_is_local(self, host: str) -> bool:
+        return host in {"127.0.0.1", "localhost", "::1"}
 
     def _print_event(self, message: dict[str, Any]) -> None:
         event = message.get("event")
@@ -665,6 +904,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", default=DEFAULT_PORT, type=int, help="CoreS3 listen port, default 8765")
     parser.add_argument("--control-host", default=DEFAULT_CONTROL_HOST, help="local API host, default 127.0.0.1")
     parser.add_argument("--control-port", default=DEFAULT_CONTROL_PORT, type=int, help="local API port, default 8766")
+    parser.add_argument("--ws-host", default=None, help="optional WebSocket API host, for example 0.0.0.0")
+    parser.add_argument("--ws-port", default=DEFAULT_WS_PORT, type=int, help="WebSocket API port, default 8767")
     parser.add_argument("--event-log", default=None, help="optional JSONL event log path")
     parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
@@ -681,6 +922,8 @@ def main() -> int:
         auto_react=not args.no_auto_react,
         event_log=args.event_log,
         control_token=args.control_token,
+        ws_host=args.ws_host,
+        ws_port=args.ws_port,
     )
     return 0 if bridge.start() else 1
 

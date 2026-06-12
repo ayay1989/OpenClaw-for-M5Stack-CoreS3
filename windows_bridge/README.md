@@ -312,6 +312,34 @@ python windows_bridge\tools\fake_cores3_device.py --host 127.0.0.1 --port 8765
 python -m unittest tests.windows_bridge.test_bridge
 ```
 
+## WebSocket 家庭 WiFi 通道
+
+Bridge 可以额外启动 WebSocket API，让同一家庭 WiFi 内的 OpenClaw、控制端或调试工具连接到 Windows 电脑：
+
+```powershell
+set OPENCLAW_BRIDGE_TOKEN=change-this-token
+python windows_bridge\openclaw_stackchan_bridge.py --host 0.0.0.0 --port 8765 --ws-host 0.0.0.0 --ws-port 8767 --control-token %OPENCLAW_BRIDGE_TOKEN%
+```
+
+连接地址：
+
+```text
+ws://<Windows电脑局域网IP>:8767/bridge?token=change-this-token
+```
+
+WebSocket 连接后会收到 `welcome`，其中包含当前设备状态和最近事件。客户端可以发送：
+
+```json
+{"type":"ping"}
+{"command":"/emotion love"}
+{"device_command":{"action":"presence","state":"listening","emotion":"normal"}}
+{"action":"motion","gesture":"nod"}
+```
+
+Bridge 会把 CoreS3 上报的 `hello`、`heartbeat`、`body_input`、`pressure`、`gesture`、`button` 等事件广播给 WebSocket 客户端。
+
+如果 `--ws-host` 使用 `0.0.0.0`，必须设置 `--control-token` 或 `OPENCLAW_BRIDGE_TOKEN`，避免家庭网络内裸露控制接口。
+
 ## 后续接 OpenClaw
 
 建议下一步在这个 Bridge 中增加：
@@ -325,7 +353,6 @@ python -m unittest tests.windows_bridge.test_bridge
 后续增强路线：
 
 - TTS PCM 流式播放到 CoreS3 speaker。
-- WebSocket 通道。
 - MQTT 事件总线。
 - 唤醒词、VAD、打断和回声消除。
 - 可选设备端/外接麦克风。

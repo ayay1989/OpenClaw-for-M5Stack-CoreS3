@@ -66,6 +66,7 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 ### Windows Bridge / OpenClaw 接入层
 
 - CoreS3 TCP server 和本机 HTTP 控制 API
+- 家庭 WiFi WebSocket API：远程客户端可订阅身体事件并发送设备命令
 - 最近身体事件缓存与轮询
 - hello/heartbeat/pressure/gesture/button 事件处理
 - OpenClaw 可调用身体工具：表情、presence、LED、动作、beep、sleep、memory cue

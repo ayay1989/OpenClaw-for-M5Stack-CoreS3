@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import os
 import json
 import socket
 import sys
@@ -181,6 +183,95 @@ class BridgeTest(unittest.TestCase):
             self.assertTrue(data["ok"])
         finally:
             bridge.stop()
+
+    def test_websocket_api_accepts_ping_and_command(self) -> None:
+        bridge = StackChanBridge(
+            host="127.0.0.1",
+            port=0,
+            control_host="127.0.0.1",
+            control_port=0,
+            auto_react=False,
+            event_log=None,
+            control_token="test-value",
+            ws_host="127.0.0.1",
+            ws_port=0,
+        )
+        self.assertTrue(bridge._start_ws_server())
+        try:
+            assert bridge._ws_server is not None
+            host, port = bridge._ws_server.getsockname()
+            client = socket.create_connection((host, port), timeout=3)
+            try:
+                key = base64.b64encode(os.urandom(16)).decode("ascii")
+                request = (
+                    "GET /bridge?token=test-value HTTP/1.1\r\n"
+                    f"Host: {host}:{port}\r\n"
+                    "Upgrade: websocket\r\n"
+                    "Connection: Upgrade\r\n"
+                    f"Sec-WebSocket-Key: {key}\r\n"
+                    "Sec-WebSocket-Version: 13\r\n"
+                    "\r\n"
+                )
+                client.sendall(request.encode("ascii"))
+                response = client.recv(4096).decode("ascii", errors="replace")
+                self.assertIn("101 Switching Protocols", response)
+                welcome = self._ws_read_json(client)
+                self.assertEqual(welcome["type"], "welcome")
+                client.sendall(self._masked_ws_frame(json.dumps({"type": "ping"}).encode("utf-8")))
+                pong = self._ws_read_json(client)
+                self.assertEqual(pong["type"], "pong")
+                client.sendall(self._masked_ws_frame(json.dumps({"command": "/emotion love"}).encode("utf-8")))
+                result = self._ws_read_json(client)
+                self.assertEqual(result["type"], "command_result")
+                self.assertEqual(result["device_command"], {"action": "emotion", "value": "love"})
+                bridge._record_event({"event": "body_input", "input": "touch", "action": "hold"})
+                event = self._ws_read_json(client)
+                self.assertEqual(event["type"], "event")
+                self.assertEqual(event["event"]["kind"], "body_input")
+            finally:
+                client.close()
+        finally:
+            bridge.stop()
+
+    def test_remote_websocket_requires_token(self) -> None:
+        bridge = StackChanBridge(
+            host="127.0.0.1",
+            port=0,
+            control_host="127.0.0.1",
+            control_port=0,
+            auto_react=False,
+            event_log=None,
+            ws_host="0.0.0.0",
+            ws_port=0,
+        )
+        self.assertFalse(bridge._start_ws_server())
+
+    def _masked_ws_frame(self, payload: bytes) -> bytes:
+        mask = os.urandom(4)
+        length = len(payload)
+        if length < 126:
+            header = bytes([0x81, 0x80 | length])
+        elif length <= 65535:
+            header = bytes([0x81, 0x80 | 126]) + length.to_bytes(2, "big")
+        else:
+            header = bytes([0x81, 0x80 | 127]) + length.to_bytes(8, "big")
+        masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
+        return header + mask + masked
+
+    def _ws_read_json(self, client: socket.socket) -> dict[str, object]:
+        header = client.recv(2)
+        self.assertEqual(header[0] & 0x0F, 0x1)
+        length = header[1] & 0x7F
+        if length == 126:
+            length = int.from_bytes(client.recv(2), "big")
+        elif length == 127:
+            length = int.from_bytes(client.recv(8), "big")
+        payload = b""
+        while len(payload) < length:
+            payload += client.recv(length - len(payload))
+        data = json.loads(payload.decode("utf-8"))
+        self.assertIsInstance(data, dict)
+        return data
 
     def test_event_log_redacts_resident_context(self) -> None:
         with tempfile.NamedTemporaryFile("r", encoding="utf-8", suffix=".jsonl", delete=False) as fh:
