@@ -6,11 +6,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "windows_bridge" / "examples"))
+sys.path.insert(0, str(ROOT / "windows_bridge"))
 
-from face_tracking_loop import FaceObservation  # noqa: E402
-from face_tracking_loop import FaceTracker  # noqa: E402
-from face_tracking_loop import parse_observation  # noqa: E402
+from openclaw_bridge import FaceObservation  # noqa: E402
+from openclaw_bridge import FaceTracker  # noqa: E402
+from openclaw_bridge import parse_observation  # noqa: E402
 
 
 class FaceTrackingTest(unittest.TestCase):

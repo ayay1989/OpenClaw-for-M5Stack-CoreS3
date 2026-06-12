@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "windows_bridge"))
 
 from openclaw_stackchan_bridge import StackChanBridge  # noqa: E402
 from openclaw_stackchan_bridge import MAX_QUEUED_COMMANDS  # noqa: E402
-from examples.openclaw_body_client import StackChanBodyClient  # noqa: E402
+from openclaw_bridge import StackChanBodyClient  # noqa: E402
 
 
 class BridgeTest(unittest.TestCase):

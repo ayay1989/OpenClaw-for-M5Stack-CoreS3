@@ -116,6 +116,8 @@ body.stop_speaking()
 
 更完整的事件语义和职责边界见 [`docs/windows-bridge-openclaw-integration.md`](../docs/windows-bridge-openclaw-integration.md)。
 
+代码边界与扩展规则见 [`docs/windows-bridge-code-governance.md`](../docs/windows-bridge-code-governance.md)。
+
 ## Resident 对话闭环骨架
 
 `resident_conversation_loop.py` 用键盘输入先模拟 ASR，用可选 HTTP URL 模拟真实 OpenClaw brain，用系统 TTS 模拟播报，同时驱动 StackChan 的 listening/thinking/speaking 表情和动作。

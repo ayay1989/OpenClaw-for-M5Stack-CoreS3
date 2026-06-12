@@ -7,11 +7,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "windows_bridge" / "examples"))
+sys.path.insert(0, str(ROOT / "windows_bridge"))
 
-from resident_conversation_loop import DemoBrainAdapter  # noqa: E402
-from resident_conversation_loop import ResidentConversationLoop  # noqa: E402
-from resident_conversation_loop import SystemTts  # noqa: E402
+from openclaw_bridge import DemoBrainAdapter  # noqa: E402
+from openclaw_bridge import ResidentConversationLoop  # noqa: E402
+from openclaw_bridge import SystemTts  # noqa: E402
 
 
 class FakeBody:
