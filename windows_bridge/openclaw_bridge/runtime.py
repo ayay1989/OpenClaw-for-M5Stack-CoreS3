@@ -9,6 +9,7 @@ from typing import Any
 
 from .body_client import StackChanBodyClient
 from .face_tracking import FaceObservation, FaceTracker, LookTarget
+from .lifecycle import LifeCycleManager
 from .resident_loop import ResidentConversationLoop, SystemTts, build_brain
 
 
@@ -20,6 +21,8 @@ class RuntimeConfig:
     event_limit: int = 20
     face_yaw_limit: int = 35
     face_lost_timeout_s: float = 2.0
+    sleep_timeout_s: float = 300.0
+    proactive_cooldown_s: float = 8.0
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RuntimeConfig":
@@ -30,6 +33,8 @@ class RuntimeConfig:
             event_limit=int(payload.get("event_limit", 20)),
             face_yaw_limit=int(payload.get("face_yaw_limit", 35)),
             face_lost_timeout_s=float(payload.get("face_lost_timeout_s", 2.0)),
+            sleep_timeout_s=float(payload.get("sleep_timeout_s", 300.0)),
+            proactive_cooldown_s=float(payload.get("proactive_cooldown_s", 8.0)),
         )
 
 
@@ -57,6 +62,16 @@ def build_conversation_loop(config: RuntimeConfig) -> ResidentConversationLoop:
 
 def build_face_tracker(config: RuntimeConfig) -> FaceTracker:
     return FaceTracker(yaw_limit=config.face_yaw_limit, lost_timeout_s=config.face_lost_timeout_s)
+
+
+def build_lifecycle_manager(config: RuntimeConfig) -> LifeCycleManager:
+    return LifeCycleManager(
+        body=build_body(config),
+        brain=build_brain(config.openclaw_url),
+        tts=SystemTts(config.tts_enabled),
+        sleep_timeout_s=config.sleep_timeout_s,
+        proactive_cooldown_s=config.proactive_cooldown_s,
+    )
 
 
 def face_simulation_targets(config: RuntimeConfig) -> list[LookTarget]:

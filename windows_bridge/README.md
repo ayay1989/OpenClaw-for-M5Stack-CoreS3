@@ -36,6 +36,7 @@ python windows_bridge\openclaw_stackchan_bridge.py --no-auto-react
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --status
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --once "你好"
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --face-sim
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --life-demo
 ```
 
 无硬件一键检查：

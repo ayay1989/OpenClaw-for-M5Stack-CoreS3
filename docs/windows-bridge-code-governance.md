@@ -21,6 +21,10 @@ Reusable logic belongs in:
 - `windows_bridge/openclaw_bridge/events.py`
   - Device event to OpenClaw intent mapping.
   - Shared semantics for tactile, button, gesture, and heartbeat events.
+- `windows_bridge/openclaw_bridge/lifecycle.py`
+  - Sleep/wake state.
+  - Event-triggered proactive responses.
+  - Local status overlay summaries.
 - `windows_bridge/openclaw_bridge/runtime.py`
   - Runtime config loading.
   - Shared builders for body, resident conversation loop, and face tracking.
@@ -43,6 +47,7 @@ When adding real OpenClaw, ASR, TTS, or camera integrations:
 - Keep hardware/model/vendor-specific startup flags in `examples` or `tools`.
 - Keep CoreS3 protocol payload construction inside `StackChanBodyClient`.
 - Keep body event semantics inside `events.py`.
+- Keep sleep/wake and proactive life behavior inside `lifecycle.py`.
 - Keep face-to-servo safety limits inside `FaceTracker`.
 - Keep long-term memory outside the bridge and outside CoreS3 firmware.
 
@@ -56,6 +61,7 @@ Current test responsibilities:
 - `test_resident_loop.py`: conversation loop body-state order and tactile context.
 - `test_face_tracking.py`: face coordinate mapping, rate limit, and lost-face recenter.
 - `test_events_runtime.py`: event intent mapping and runtime config behavior.
+- `test_lifecycle.py`: sleep/wake behavior, proactive actions, and status overlay summaries.
 
 Before pushing:
 
