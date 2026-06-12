@@ -41,11 +41,14 @@ Windows Bridge side:
 - Device registry from `hello`.
 - Event router for button, touch, pressure, gesture, and heartbeat.
 - Command helpers for emotion, presence, LED, look, motion, and beep.
+- Local HTTP control API for OpenClaw and future ASR/TTS/vision adapters.
+- Fake CoreS3 device and unit tests for no-hardware validation.
 
 Acceptance:
 - Touching the robot produces both `touch` and `pressure` events in Windows logs.
 - Missing motion/audio hardware does not break the session.
 - OpenClaw can set face, light, presence, and head motion through one bridge API.
+- Without hardware, the fake CoreS3 device can exercise hello, heartbeat, pressure, and command delivery.
 
 ## Milestone 2: Conversation Loop
 
