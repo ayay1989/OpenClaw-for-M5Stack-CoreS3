@@ -21,7 +21,7 @@
 #include "presence.h"
 
 static const char *TAG = "protocol";
-static const char *FIRMWARE_VERSION = "0.5.0";
+static const char *FIRMWARE_VERSION = "1.0.0";
 static protocol_send_fn_t s_sender;
 static void *s_sender_ctx;
 

@@ -2,6 +2,8 @@
 
 ESP-IDF v5.x firmware for M5Stack CoreS3 / ESP32-S3. It connects to WiFi, keeps a TCP client connection to OpenClaw, accepts newline-delimited JSON from both serial and TCP, drives the ILI9341 LCD, controls LED outputs, moves the Stackchan head when servos are present, and reports button/touch/heartbeat events.
 
+Stable OpenClaw integration contract: [docs/openclaw-stackchan-protocol.md](docs/openclaw-stackchan-protocol.md)
+
 This project was checked against the CoreS3 board support in `mo-hantang/Stackchan-HtSz`. The current defaults therefore use the Stackchan-HtSz CoreS3 board pins:
 
 - Internal I2C: SDA GPIO12, SCL GPIO11
