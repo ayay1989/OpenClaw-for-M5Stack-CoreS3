@@ -764,6 +764,12 @@ static bool protocol_handle_envelope(cJSON *root, const char *source)
         if (source != NULL && strcmp(source, "tcp") == 0 &&
             (strcmp(type, "hello_ack") == 0 || cJSON_IsString(session_json) || cJSON_IsString(resident))) {
             presence_set_connection(CONNECTION_OPENCLAW_READY);
+            presence_snapshot_t snapshot;
+            presence_get_snapshot(&snapshot);
+            if (snapshot.presence == PRESENCE_CONNECTING || snapshot.presence == PRESENCE_BOOTING) {
+                presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
+                apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
+            }
             ready = true;
         }
         send_ok("hello", ready ? "openclaw_ready" : "hello_seen");

@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -82,6 +83,27 @@ static bool socket_is_active(void)
     return active;
 }
 
+static void mark_socket_failed(int sock)
+{
+    xSemaphoreTake(s_sock_lock, portMAX_DELAY);
+    if (s_sock == sock) {
+        shutdown(s_sock, SHUT_RDWR);
+    }
+    xSemaphoreGive(s_sock_lock);
+}
+
+static void configure_tcp_keepalive(int sock)
+{
+    int keepalive = 1;
+    int idle = 30;
+    int interval = 10;
+    int count = 3;
+    ESP_ERROR_CHECK_WITHOUT_ABORT(setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle)));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval)));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count)));
+}
+
 static esp_err_t i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value)
 {
     uint8_t buffer[2] = {reg, value};
@@ -134,12 +156,7 @@ static void protocol_sender(const char *line, void *ctx)
         }
 
         if (failed) {
-            xSemaphoreTake(s_sock_lock, portMAX_DELAY);
-            if (s_sock == sock) {
-                close(s_sock);
-                s_sock = -1;
-            }
-            xSemaphoreGive(s_sock_lock);
+            mark_socket_failed(sock);
         }
     }
     xSemaphoreGive(s_send_lock);
@@ -339,6 +356,7 @@ static void tcp_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(5000));
             continue;
         }
+        configure_tcp_keepalive(sock);
 
         ESP_LOGI(TAG, "TCP connected");
         set_socket(sock);

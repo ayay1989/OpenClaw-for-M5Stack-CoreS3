@@ -63,6 +63,29 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(queued["type"], "hello_ack")
         self.assertEqual(queued["resident_id"], "openclaw")
 
+    def test_hello_queues_memory_context_when_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            memory_path = Path(tmp) / "memory.json"
+            memory_path.write_text(
+                json.dumps({"resident_id": "openclaw", "summary": "记得蓝色呼吸灯"}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            bridge = StackChanBridge(
+                host="127.0.0.1",
+                port=0,
+                control_host="127.0.0.1",
+                control_port=0,
+                auto_react=False,
+                event_log=None,
+                memory_context_path=str(memory_path),
+            )
+            bridge._handle_line(json.dumps({"type": "hello", "device": {"device_id": "FAKE"}}))
+            ack = bridge._send_queue.popleft()
+            memory = bridge._send_queue.popleft()
+            self.assertEqual(ack["type"], "hello_ack")
+            self.assertEqual(memory["type"], "memory_context")
+            self.assertEqual(memory["summary"], "记得蓝色呼吸灯")
+
     def test_pressure_press_maps_to_presence_reaction(self) -> None:
         bridge = self.make_bridge(auto_react=True)
         bridge._handle_line(

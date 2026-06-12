@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from openclaw_bridge.edge_tts_bridge import EdgeTtsBridge
+from openclaw_bridge.memory_context import MemoryContext, load_memory_context
 from openclaw_bridge.mqtt_bus import MqttBusClient, MqttConfig
 
 
@@ -37,6 +38,7 @@ DEFAULT_CONTROL_HOST = "127.0.0.1"
 DEFAULT_CONTROL_PORT = 8766
 DEFAULT_WS_PORT = 8767
 DEFAULT_EVENT_LOG = os.path.join(os.path.dirname(__file__), "logs", "events.ndjson")
+DEFAULT_MEMORY_CONTEXT_PATH = os.path.join(os.path.dirname(__file__), "local_memory_context.json")
 MAX_QUEUED_COMMANDS = 100
 MAX_EVENTS = 300
 MAX_LINE_BUFFER = 65536
@@ -92,6 +94,7 @@ class StackChanBridge:
         ws_port: int = DEFAULT_WS_PORT,
         mqtt_config: MqttConfig | None = None,
         tts_voice: str = "zh-CN-YunxiNeural",
+        memory_context_path: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -104,6 +107,8 @@ class StackChanBridge:
         self.ws_port = ws_port
         self.mqtt_config = mqtt_config
         self.tts_voice = tts_voice
+        self.memory_context_path = memory_context_path
+        self.memory_context = self._load_memory_context(memory_context_path)
 
         self.state = DeviceState()
         self._events: deque[BridgeEvent] = deque(maxlen=MAX_EVENTS)
@@ -122,6 +127,34 @@ class StackChanBridge:
         self._mqtt_client: MqttBusClient | None = None
         self._tts = EdgeTtsBridge(tts_voice)
         self._last_auto_reaction: dict[str, float] = {}
+
+    def _load_memory_context(self, path: str | None) -> MemoryContext | None:
+        if not path:
+            return None
+        try:
+            context = load_memory_context(path)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"[bridge] memory context load failed: {exc}")
+            return None
+        if context is not None and context.is_loaded():
+            print(f"[bridge] memory context loaded from {path}")
+            return context
+        print(f"[bridge] memory context file is empty: {path}")
+        return None
+
+    def _memory_context_command(self) -> dict[str, Any] | None:
+        if self.memory_context is None:
+            return None
+        payload = self.memory_context.to_brain_payload()
+        return {
+            "type": "memory_context",
+            "resident_id": payload.get("resident_id") or "openclaw",
+            "session_id": payload.get("session_id") or "windows-bridge",
+            "ttl_ms": 3600000,
+            "summary": payload.get("summary") or "",
+            "facts": payload.get("facts") or [],
+            "preferences": payload.get("preferences") or {},
+        }
 
     def start(self) -> bool:
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -734,6 +767,9 @@ class StackChanBridge:
                 client = self._client
                 self._connection_ready = client is not None
             self._send_now_or_queue({"type": "hello_ack", "session_id": "windows-bridge", "resident_id": "openclaw"})
+            memory_command = self._memory_context_command()
+            if memory_command is not None:
+                self._send_now_or_queue(memory_command)
             if client is not None:
                 self._flush_queued_commands(client)
         if message.get("event") == "heartbeat":
@@ -990,6 +1026,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mqtt-username", default=os.environ.get("OPENCLAW_MQTT_USERNAME"), help="optional MQTT username")
     parser.add_argument("--mqtt-password", default=os.environ.get("OPENCLAW_MQTT_PASSWORD"), help="optional MQTT password")
     parser.add_argument("--tts-voice", default=os.environ.get("OPENCLAW_TTS_VOICE", "zh-CN-YunxiNeural"), help="Edge-TTS voice, for example zh-CN-YunxiNeural")
+    parser.add_argument("--memory-context", default=os.environ.get("OPENCLAW_MEMORY_CONTEXT", DEFAULT_MEMORY_CONTEXT_PATH), help="optional local memory_context JSON path")
     parser.add_argument("--event-log", default=os.environ.get("OPENCLAW_EVENT_LOG", DEFAULT_EVENT_LOG), help="JSONL event log path")
     parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
@@ -1024,6 +1061,7 @@ def main() -> int:
         ws_port=args.ws_port,
         mqtt_config=mqtt_config,
         tts_voice=args.tts_voice,
+        memory_context_path=args.memory_context if os.path.exists(args.memory_context) else None,
     )
     return 0 if bridge.start() else 1
 

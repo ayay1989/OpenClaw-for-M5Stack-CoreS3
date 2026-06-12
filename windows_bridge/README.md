@@ -349,6 +349,13 @@ windows_bridge\logs\events.ndjson
 
 如果你想改位置，启动 Bridge 时传入 `--event-log <路径>`，或者设置 `OPENCLAW_EVENT_LOG`。
 
+如果 Windows 端看到 `10054` 或反复 connected/disconnected：
+
+- 先看 `events.ndjson` 里每次断开前最后一条设备消息，是 `heartbeat`、`status`、还是某条命令响应。
+- 固件已启用 TCP keepalive，并把发送失败交给 TCP 任务统一收尾，避免普通 heartbeat 发送失败直接关闭连接。
+- 如果日志里 `hello` 后没有 `memory_context`，确认 `windows_bridge\local_memory_context.json` 存在且不是空内容；Bridge 会在 `hello_ack` 后自动下发它。
+- 如果 `presence_state` 长时间停在 `connecting`，说明设备没有收到或处理 `hello_ack`，优先检查 Bridge 发送日志 `[tx] {"type":"hello_ack"...}`。
+
 ## WebSocket 家庭 WiFi 通道
 
 Bridge 可以额外启动 WebSocket API，让同一家庭 WiFi 内的 OpenClaw、控制端或调试工具连接到 Windows 电脑：
