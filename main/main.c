@@ -26,6 +26,7 @@
 #include "emotions.h"
 #include "lcddriver.h"
 #include "leddriver.h"
+#include "presence.h"
 #include "protocol.h"
 
 #define WIFI_SSID CONFIG_OPENCLAW_WIFI_SSID
@@ -146,11 +147,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         xEventGroupClearBits(s_wifi_events, WIFI_CONNECTED_BIT);
+        presence_set_connection(CONNECTION_OFFLINE);
         ESP_LOGW(TAG, "WiFi disconnected, reconnecting");
         esp_wifi_connect();
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "WiFi connected, IP=" IPSTR, IP2STR(&event->ip_info.ip));
+        presence_set_connection(CONNECTION_WIFI_CONNECTED);
         xEventGroupSetBits(s_wifi_events, WIFI_CONNECTED_BIT);
     }
 }
@@ -271,7 +274,7 @@ static void handle_rx_bytes(char *line_buf, size_t line_size, size_t *line_len, 
 static void serial_task(void *arg)
 {
     (void)arg;
-    char line[512];
+    char line[1024];
     size_t len = 0;
     while (true) {
         int ch = fgetc(stdin);
@@ -289,7 +292,7 @@ static void tcp_task(void *arg)
 {
     (void)arg;
     char rx[256];
-    char line[512];
+    char line[1024];
     size_t line_len = 0;
 
     while (true) {
@@ -334,6 +337,7 @@ static void tcp_task(void *arg)
 
         ESP_LOGI(TAG, "TCP connected");
         set_socket(sock);
+        presence_set_connection(CONNECTION_TCP_CONNECTED);
         protocol_emit_hello();
         line_len = 0;
 
@@ -352,6 +356,9 @@ static void tcp_task(void *arg)
             }
         }
         set_socket(-1);
+        presence_set_session(NULL);
+        EventBits_t bits = xEventGroupGetBits(s_wifi_events);
+        presence_set_connection((bits & WIFI_CONNECTED_BIT) != 0 ? CONNECTION_WIFI_CONNECTED : CONNECTION_OFFLINE);
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
@@ -469,6 +476,9 @@ void app_main(void)
     s_send_lock = xSemaphoreCreateMutex();
     ESP_ERROR_CHECK(s_send_lock == NULL ? ESP_ERR_NO_MEM : ESP_OK);
 
+    ESP_ERROR_CHECK(presence_init());
+    presence_set_state(PRESENCE_BOOTING, "happy");
+    presence_set_connection(CONNECTION_OFFLINE);
     protocol_init(protocol_sender, NULL);
     ESP_ERROR_CHECK(i2c_init_internal());
     ESP_ERROR_CHECK(lcd_init());
@@ -477,6 +487,7 @@ void app_main(void)
 
     emotion_draw("happy");
     led_set_breath(0, 100, 255, 3);
+    presence_set_state(PRESENCE_CONNECTING, "happy");
     protocol_emit_hello();
 
     ESP_ERROR_CHECK(wifi_init());

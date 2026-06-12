@@ -19,3 +19,4 @@ extern const size_t g_emotion_count;
 
 const emotion_bitmap_t *emotion_find(const char *name);
 bool emotion_draw(const char *name);
+bool emotion_draw_presence(const char *name, bool mouth_open, int gaze_x, int gaze_y);

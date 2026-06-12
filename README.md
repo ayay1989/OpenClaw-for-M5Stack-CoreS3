@@ -31,6 +31,7 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 - Boot state: fullscreen Stackchan-style `happy` face + blue breathing LED
 - Heartbeat: every 10 seconds
 - Touch gestures: `tap`, `double_tap`, `long_press`, `swipe_left`, `swipe_right`, `swipe_up`, `swipe_down`
+- Presence states: `booting`, `connecting`, `online_idle`, `listening`, `thinking`, `speaking`, `sleeping`, `offline_local`, `error`
 
 ## Quick Serial Tests
 
@@ -39,7 +40,23 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 {"action":"emotion","value":"love"}
 {"action":"led","r":255,"g":100,"b":50}
 {"action":"led_effect","effect":"breath","r":0,"g":200,"b":255,"speed":3}
+{"action":"presence","state":"listening","emotion":"normal"}
+{"action":"presence","state":"thinking","emotion":"sleepy"}
+{"action":"memory_cue","emotion":"love","ttl_ms":3000}
+{"action":"presence","state":"speaking","emotion":"happy","mouth":true}
+{"action":"sleep","enabled":true}
 ```
+
+`presence` is the lightweight OpenClaw resident state layer. It changes the face and LED mood while keeping the older `emotion`, `led`, and `led_effect` commands compatible.
+
+The firmware also accepts a short-lived context envelope:
+
+```json
+{"type":"memory_context","session_id":"demo-session","resident_id":"openclaw","ttl_ms":3600000}
+```
+
+Do not send full long-term memory to the device. CoreS3 only keeps a short-lived state flag; OpenClaw remains the memory owner.
+If `summary`, `facts`, or similar fields are present, this firmware intentionally ignores their content.
 
 ## MCP-Compatible Calls
 
@@ -50,6 +67,7 @@ The main protocol is still newline-delimited JSON. The firmware also accepts a l
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/list","id":2}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.emotion.set","arguments":{"value":"love"}},"id":3}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.led.breath","arguments":{"r":0,"g":200,"b":255,"speed":3}},"id":4}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.presence.set","arguments":{"state":"speaking","emotion":"happy"}},"id":5}}
 ```
 
 Supported face names: `happy`, `normal`, `sad`, `angry`, `surprised`, `sleepy`, `shy`, `love`.

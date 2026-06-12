@@ -19,6 +19,9 @@ typedef enum {
 
 typedef struct {
     face_expression_t expression;
+    bool mouth_open;
+    int gaze_x;
+    int gaze_y;
 } face_render_ctx_t;
 
 const emotion_bitmap_t g_emotions[] = {
@@ -124,8 +127,16 @@ static bool z_mark(int x, int y, int cx, int cy, int size)
            near_segment(x, y, cx - size, cy + size, cx + size, cy + size, 1);
 }
 
-static uint16_t face_pixel(face_expression_t expression, int x, int y)
+static bool eye_dot(int x, int y, int cx, int cy, int rx, int ry, const face_render_ctx_t *ctx)
 {
+    int gx = ctx == NULL ? 0 : ctx->gaze_x;
+    int gy = ctx == NULL ? 0 : ctx->gaze_y;
+    return in_ellipse(x, y, cx + gx, cy + gy, rx, ry);
+}
+
+static uint16_t face_pixel(const face_render_ctx_t *ctx, int x, int y)
+{
+    face_expression_t expression = ctx->expression;
     const uint16_t bg = RGB565(0, 0, 0);
     const uint16_t fg = RGB565(255, 255, 255);
     const uint16_t red = RGB565(255, 64, 112);
@@ -145,16 +156,24 @@ static uint16_t face_pixel(face_expression_t expression, int x, int y)
     case FACE_HAPPY:
         on = smile_arc(x, y, 90, 98, 20, 14, 3, false) ||
              smile_arc(x, y, 230, 98, 20, 14, 3, false) ||
-             smile_arc(x, y, 160, 162, 48, 34, 4, false);
+             (ctx->mouth_open ? in_ellipse(x, y, 160, 162, 30, 20) :
+              smile_arc(x, y, 160, 162, 48, 34, 4, false));
+        if (ctx->mouth_open && in_ellipse(x, y, 160, 162, 16, 10)) {
+            on = false;
+        }
         break;
     case FACE_NORMAL:
-        on = in_ellipse(x, y, 90, 96, 13, 13) ||
-             in_ellipse(x, y, 230, 96, 13, 13) ||
-             near_segment(x, y, 132, 160, 188, 160, 3);
+        on = eye_dot(x, y, 90, 96, 13, 13, ctx) ||
+             eye_dot(x, y, 230, 96, 13, 13, ctx) ||
+             (ctx->mouth_open ? in_ellipse(x, y, 160, 160, 22, 16) :
+              near_segment(x, y, 132, 160, 188, 160, 3));
+        if (ctx->mouth_open && in_ellipse(x, y, 160, 160, 10, 7)) {
+            on = false;
+        }
         break;
     case FACE_SAD:
-        on = in_ellipse(x, y, 90, 96, 12, 12) ||
-             in_ellipse(x, y, 230, 96, 12, 12) ||
+        on = eye_dot(x, y, 90, 96, 12, 12, ctx) ||
+             eye_dot(x, y, 230, 96, 12, 12, ctx) ||
              near_segment(x, y, 76, 86, 104, 96, 4) ||
              near_segment(x, y, 216, 96, 244, 86, 4) ||
              smile_arc(x, y, 160, 176, 42, 26, 4, true);
@@ -166,10 +185,10 @@ static uint16_t face_pixel(face_expression_t expression, int x, int y)
              near_segment(x, y, 128, 165, 192, 158, 4);
         break;
     case FACE_SURPRISED:
-        on = in_ellipse(x, y, 90, 96, 17, 17) ||
-             in_ellipse(x, y, 230, 96, 17, 17) ||
+        on = eye_dot(x, y, 90, 96, 17, 17, ctx) ||
+             eye_dot(x, y, 230, 96, 17, 17, ctx) ||
              in_ellipse(x, y, 160, 162, 25, 34);
-        if (in_ellipse(x, y, 90, 96, 7, 7) || in_ellipse(x, y, 230, 96, 7, 7) ||
+        if (eye_dot(x, y, 90, 96, 7, 7, ctx) || eye_dot(x, y, 230, 96, 7, 7, ctx) ||
             in_ellipse(x, y, 160, 162, 13, 21)) {
             on = false;
         }
@@ -182,8 +201,8 @@ static uint16_t face_pixel(face_expression_t expression, int x, int y)
              z_mark(x, y, 278, 46, 9);
         break;
     case FACE_SHY:
-        on = in_ellipse(x, y, 90, 96, 11, 11) ||
-             in_ellipse(x, y, 230, 96, 11, 11) ||
+        on = eye_dot(x, y, 90, 96, 11, 11, ctx) ||
+             eye_dot(x, y, 230, 96, 11, 11, ctx) ||
              smile_arc(x, y, 160, 162, 34, 18, 3, false);
         break;
     case FACE_LOVE:
@@ -211,11 +230,11 @@ static void render_face_line(int y, uint16_t *line, int width, void *ctx)
 {
     face_render_ctx_t *render_ctx = (face_render_ctx_t *)ctx;
     for (int x = 0; x < width; ++x) {
-        line[x] = face_pixel(render_ctx->expression, x, y);
+        line[x] = face_pixel(render_ctx, x, y);
     }
 }
 
-bool emotion_draw(const char *name)
+bool emotion_draw_presence(const char *name, bool mouth_open, int gaze_x, int gaze_y)
 {
     const emotion_bitmap_t *emotion = emotion_find(name);
     if (emotion == NULL) {
@@ -223,6 +242,9 @@ bool emotion_draw(const char *name)
     }
 
     face_render_ctx_t ctx = {.expression = FACE_NORMAL};
+    ctx.mouth_open = mouth_open;
+    ctx.gaze_x = gaze_x < -8 ? -8 : (gaze_x > 8 ? 8 : gaze_x);
+    ctx.gaze_y = gaze_y < -6 ? -6 : (gaze_y > 6 ? 6 : gaze_y);
     if (strcmp(emotion->name, "happy") == 0) {
         ctx.expression = FACE_HAPPY;
     } else if (strcmp(emotion->name, "sad") == 0) {
@@ -241,4 +263,9 @@ bool emotion_draw(const char *name)
 
     lcd_draw_rgb565_lines(render_face_line, &ctx);
     return true;
+}
+
+bool emotion_draw(const char *name)
+{
+    return emotion_draw_presence(name, false, 0, 0);
 }

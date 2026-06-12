@@ -3,6 +3,7 @@ idf_component_register(
         "main.c"
         "lcddriver.c"
         "leddriver.c"
+        "presence.c"
         "protocol.c"
         "button.c"
         "emotions_data.c"
