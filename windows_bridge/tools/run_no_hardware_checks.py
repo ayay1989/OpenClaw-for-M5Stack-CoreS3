@@ -32,6 +32,7 @@ def main() -> int:
             "windows_bridge/openclaw_bridge/body_tools.py",
             "windows_bridge/openclaw_bridge/camera_vision.py",
             "windows_bridge/openclaw_bridge/device_registry.py",
+            "windows_bridge/openclaw_bridge/edge_tts_bridge.py",
             "windows_bridge/openclaw_bridge/events.py",
             "windows_bridge/openclaw_bridge/face_tracking.py",
             "windows_bridge/openclaw_bridge/resident_loop.py",
@@ -49,6 +50,8 @@ def main() -> int:
             "windows_bridge/examples/stackchan_runtime.py",
             "windows_bridge/tools/fake_cores3_device.py",
             "windows_bridge/tools/fake_openclaw_brain.py",
+            "windows_bridge/tools/bridge_smoke_test.py",
+            "windows_bridge/tools/write_firmware_config.py",
         ]
     )
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--face-sim"])

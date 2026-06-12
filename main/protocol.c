@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "cJSON.h"
 #include "driver/gpio.h"
@@ -18,6 +19,7 @@
 #include "freertos/task.h"
 #include "lcddriver.h"
 #include "leddriver.h"
+#include "mbedtls/base64.h"
 #include "presence.h"
 
 static const char *TAG = "protocol";
@@ -32,7 +34,15 @@ typedef struct {
     bool mouth_open;
 } visual_update_t;
 
+typedef struct {
+    bool active;
+    char stream_id[32];
+    int sample_rate;
+    int channels;
+} audio_stream_state_t;
+
 static QueueHandle_t s_visual_queue;
+static audio_stream_state_t s_audio_stream;
 
 static void send_json(cJSON *root)
 {
@@ -121,6 +131,113 @@ static void copy_small(char *dst, size_t dst_len, const char *src)
     }
     strncpy(dst, src, dst_len - 1);
     dst[dst_len - 1] = '\0';
+}
+
+static esp_err_t write_pcm_chunk(const uint8_t *pcm, size_t pcm_len, int channels)
+{
+    if (pcm == NULL || pcm_len == 0 || (pcm_len % sizeof(int16_t)) != 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (channels == 2) {
+        return audio_write_pcm((const int16_t *)pcm, pcm_len / sizeof(int16_t), 500);
+    }
+    if (channels != 1) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    size_t mono_samples = pcm_len / sizeof(int16_t);
+    int16_t *stereo = malloc(mono_samples * 2 * sizeof(int16_t));
+    if (stereo == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    const int16_t *mono = (const int16_t *)pcm;
+    for (size_t i = 0; i < mono_samples; ++i) {
+        stereo[i * 2] = mono[i];
+        stereo[i * 2 + 1] = mono[i];
+    }
+    esp_err_t err = audio_write_pcm(stereo, mono_samples * 2, 500);
+    free(stereo);
+    return err;
+}
+
+static void handle_audio_stream(cJSON *root, const char *action)
+{
+    cJSON *op_json = cJSON_GetObjectItem(root, "op");
+    cJSON *stream_json = cJSON_GetObjectItem(root, "stream_id");
+    if (!cJSON_IsString(op_json) || !cJSON_IsString(stream_json)) {
+        send_error(action, "audio_stream requires op and stream_id");
+        return;
+    }
+    if (!audio_is_available()) {
+        send_error(action, "audio unavailable");
+        return;
+    }
+
+    const char *op = op_json->valuestring;
+    const char *stream_id = stream_json->valuestring;
+    if (strcmp(op, "start") == 0) {
+        int sample_rate = json_int_or_default(root, "sample_rate", CORES3_AUDIO_SAMPLE_RATE);
+        int channels = json_int_or_default(root, "channels", 1);
+        cJSON *format_json = cJSON_GetObjectItem(root, "format");
+        const char *format = cJSON_IsString(format_json) ? format_json->valuestring : "pcm_s16le";
+        if (sample_rate != CORES3_AUDIO_SAMPLE_RATE || (channels != 1 && channels != 2) ||
+            strcmp(format, "pcm_s16le") != 0) {
+            send_error(action, "audio_stream requires pcm_s16le, 24000Hz, 1 or 2 channels");
+            return;
+        }
+        s_audio_stream.active = true;
+        copy_small(s_audio_stream.stream_id, sizeof(s_audio_stream.stream_id), stream_id);
+        s_audio_stream.sample_rate = sample_rate;
+        s_audio_stream.channels = channels;
+        send_ok(action, "started");
+        return;
+    }
+    if (strcmp(op, "stop") == 0) {
+        s_audio_stream.active = false;
+        s_audio_stream.stream_id[0] = '\0';
+        send_ok(action, "stopped");
+        return;
+    }
+    if (strcmp(op, "chunk") != 0) {
+        send_error(action, "unknown audio_stream op");
+        return;
+    }
+    if (!s_audio_stream.active || strcmp(s_audio_stream.stream_id, stream_id) != 0) {
+        send_error(action, "audio stream not started");
+        return;
+    }
+    cJSON *data_json = cJSON_GetObjectItem(root, "data_b64");
+    if (!cJSON_IsString(data_json)) {
+        send_error(action, "audio_stream chunk requires data_b64");
+        return;
+    }
+
+    size_t out_len = 0;
+    const unsigned char *data = (const unsigned char *)data_json->valuestring;
+    size_t data_len = strlen(data_json->valuestring);
+    int rc = mbedtls_base64_decode(NULL, 0, &out_len, data, data_len);
+    if (rc != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL || out_len == 0 || out_len > 8192) {
+        send_error(action, "invalid audio chunk");
+        return;
+    }
+    uint8_t *decoded = malloc(out_len);
+    if (decoded == NULL) {
+        send_error(action, "no memory for audio chunk");
+        return;
+    }
+    rc = mbedtls_base64_decode(decoded, out_len, &out_len, data, data_len);
+    if (rc != 0) {
+        free(decoded);
+        send_error(action, "invalid base64 audio chunk");
+        return;
+    }
+    esp_err_t err = write_pcm_chunk(decoded, out_len, s_audio_stream.channels);
+    free(decoded);
+    if (err == ESP_OK) {
+        send_ok(action, "chunk");
+    } else {
+        send_error(action, audio_error_message(err));
+    }
 }
 
 static void apply_presence_visuals_now(presence_state_t state, const char *emotion, bool mouth_open)
@@ -858,18 +975,7 @@ void protocol_handle_line(const char *line, const char *source)
             }
         }
     } else if (strcmp(action, "audio_stream") == 0) {
-        cJSON *op_json = cJSON_GetObjectItem(root, "op");
-        cJSON *stream_json = cJSON_GetObjectItem(root, "stream_id");
-        if (!cJSON_IsString(op_json) || !cJSON_IsString(stream_json)) {
-            send_error(action, "audio_stream requires op and stream_id");
-        } else if (strcmp(op_json->valuestring, "start") != 0 && strcmp(op_json->valuestring, "chunk") != 0 &&
-                   strcmp(op_json->valuestring, "stop") != 0) {
-            send_error(action, "unknown audio_stream op");
-        } else if (!audio_is_available()) {
-            send_error(action, "audio unavailable");
-        } else {
-            send_error(action, "audio streaming not implemented");
-        }
+        handle_audio_stream(root, action);
     } else if (strcmp(action, "interrupt") == 0) {
         presence_set_state(PRESENCE_ONLINE_IDLE, "normal");
         apply_presence_visuals(PRESENCE_ONLINE_IDLE, "normal", false);
@@ -927,7 +1033,7 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "servo", body_motion_available());
     cJSON_AddBoolToObject(features, "audio_in", false);
     cJSON_AddBoolToObject(features, "audio_out", audio_is_available());
-    cJSON_AddBoolToObject(features, "audio_stream_out", false);
+    cJSON_AddBoolToObject(features, "audio_stream_out", audio_is_available());
     cJSON_AddBoolToObject(features, "wake_word", false);
     cJSON_AddBoolToObject(features, "echo_cancellation", false);
     cJSON_AddBoolToObject(features, "websocket", false);
@@ -1035,6 +1141,16 @@ void protocol_emit_touch(int x, int y)
 
 void protocol_emit_pressure(const char *action, int x, int y, int intensity)
 {
+    if (action != NULL && strcmp(action, "press") == 0) {
+        presence_set_state(PRESENCE_LISTENING, "happy");
+        apply_presence_visuals(PRESENCE_LISTENING, "happy", false);
+    } else if (action != NULL && strcmp(action, "hold") == 0) {
+        presence_set_state(PRESENCE_SPEAKING, "love");
+        apply_presence_visuals(PRESENCE_SPEAKING, "love", true);
+    } else if (action != NULL && strcmp(action, "release") == 0) {
+        presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
+        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
+    }
     protocol_emit_body_input("touch", action, "touchscreen", x, y, intensity, "tactile_contact");
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "pressure");

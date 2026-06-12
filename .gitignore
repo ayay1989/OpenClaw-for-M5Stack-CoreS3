@@ -1,5 +1,6 @@
 build/
 sdkconfig
+windows_bridge/generated_sdkconfig.defaults
 managed_components/
 dependencies.lock
 __pycache__/
@@ -8,6 +9,8 @@ __pycache__/
 *.log
 windows_bridge/config.local.json
 windows_bridge/*local*.json
+windows_bridge/*.local.env
+windows_bridge/install.local.env
 local_memory_context*.json
 windows_bridge/local_memory_context.json
 .env

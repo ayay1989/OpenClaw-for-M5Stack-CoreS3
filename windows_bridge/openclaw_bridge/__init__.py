@@ -6,6 +6,7 @@ from .body_tools import BodyTool, BodyToolResult, BodyToolRouter
 from .body_client import StackChanBodyClient
 from .camera_vision import FaceBox, OpenCvFaceDetector, observation_from_face_box
 from .device_registry import DeviceRegistry, StackChanDevice
+from .edge_tts_bridge import EdgeTtsBridge, EdgeTtsResult
 from .events import BodyIntent, intent_from_event, intents_from_events, strongest_intent
 from .face_tracking import FaceObservation, FaceTracker, LookTarget, parse_observation
 from .lifecycle import LifeCycleManager, LifeState, LifeStatus, ProactiveAction, summarize_intents
@@ -30,6 +31,8 @@ __all__ = [
     "DeviceRegistry",
     "EchoControlPlan",
     "EnergyVad",
+    "EdgeTtsBridge",
+    "EdgeTtsResult",
     "ExternalCommandAsr",
     "FaceBox",
     "FaceObservation",

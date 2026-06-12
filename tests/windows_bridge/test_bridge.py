@@ -314,6 +314,30 @@ class BridgeTest(unittest.TestCase):
         finally:
             bridge.stop()
 
+    def test_tts_action_uses_bridge_tts_handler(self) -> None:
+        class FakeTts:
+            voice = "zh-CN-YunxiNeural"
+
+            def speak(self, text, send_command, device_audio_stream_available, prefer_device=True):  # noqa: ANN001
+                self.args = (text, device_audio_stream_available, prefer_device)
+
+                class Result:
+                    ok = True
+                    mode = "windows_playback"
+                    voice = "zh-CN-YunxiNeural"
+                    message = "fake"
+
+                return Result()
+
+        bridge = self.make_bridge(auto_react=False)
+        fake = FakeTts()
+        bridge._tts = fake
+        result = bridge.handle_control_command({"action": "tts", "text": "你好"})
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mode"], "windows_playback")
+        self.assertEqual(fake.args, ("你好", False, True))
+        self.assertEqual(bridge._send_queue[0]["action"], "presence")
+
 
 if __name__ == "__main__":
     unittest.main()

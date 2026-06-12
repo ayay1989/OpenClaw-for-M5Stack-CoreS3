@@ -27,6 +27,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from openclaw_bridge.edge_tts_bridge import EdgeTtsBridge
 from openclaw_bridge.mqtt_bus import MqttBusClient, MqttConfig
 
 
@@ -89,6 +90,7 @@ class StackChanBridge:
         ws_host: str | None = None,
         ws_port: int = DEFAULT_WS_PORT,
         mqtt_config: MqttConfig | None = None,
+        tts_voice: str = "zh-CN-YunxiNeural",
     ) -> None:
         self.host = host
         self.port = port
@@ -100,6 +102,7 @@ class StackChanBridge:
         self.ws_host = ws_host
         self.ws_port = ws_port
         self.mqtt_config = mqtt_config
+        self.tts_voice = tts_voice
 
         self.state = DeviceState()
         self._events: deque[BridgeEvent] = deque(maxlen=MAX_EVENTS)
@@ -116,6 +119,7 @@ class StackChanBridge:
         self._ws_clients: set[socket.socket] = set()
         self._ws_lock = threading.Lock()
         self._mqtt_client: MqttBusClient | None = None
+        self._tts = EdgeTtsBridge(tts_voice)
         self._last_auto_reaction: dict[str, float] = {}
 
     def start(self) -> bool:
@@ -176,6 +180,8 @@ class StackChanBridge:
         return self._send_now(client, payload)
 
     def handle_control_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if payload.get("action") == "tts":
+            return self._handle_tts_command(payload)
         if "command" in payload:
             command = payload.get("command")
             if not isinstance(command, str):
@@ -199,6 +205,30 @@ class StackChanBridge:
             "sent_now": sent,
             "queued": not sent,
             "device_command": device_payload,
+        }
+
+    def _handle_tts_command(self, payload: dict[str, Any]) -> dict[str, Any]:
+        text = payload.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return {"ok": False, "error": "tts text is required"}
+        voice = payload.get("voice")
+        if isinstance(voice, str) and voice.strip() and voice != self._tts.voice:
+            self._tts = EdgeTtsBridge(voice.strip())
+        prefer_device = bool(payload.get("prefer_device", True))
+        self.send_command({"action": "presence", "state": "speaking", "emotion": "happy", "mouth": True})
+        result = self._tts.speak(
+            text,
+            self.send_command,
+            device_audio_stream_available=bool(self.state.features.get("audio_stream_out")),
+            prefer_device=prefer_device,
+        )
+        self.send_command({"action": "presence", "state": "online_idle", "emotion": "happy", "mouth": False})
+        return {
+            "ok": result.ok,
+            "action": "tts",
+            "mode": result.mode,
+            "voice": result.voice,
+            "message": result.message,
         }
 
     def recent_events(self, limit: int = 50, after: float | None = None) -> list[dict[str, Any]]:
@@ -946,6 +976,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mqtt-client-id", default=os.environ.get("OPENCLAW_MQTT_CLIENT_ID", "openclaw-stackchan-bridge"), help="MQTT client id")
     parser.add_argument("--mqtt-username", default=os.environ.get("OPENCLAW_MQTT_USERNAME"), help="optional MQTT username")
     parser.add_argument("--mqtt-password", default=os.environ.get("OPENCLAW_MQTT_PASSWORD"), help="optional MQTT password")
+    parser.add_argument("--tts-voice", default=os.environ.get("OPENCLAW_TTS_VOICE", "zh-CN-YunxiNeural"), help="Edge-TTS voice, for example zh-CN-YunxiNeural")
     parser.add_argument("--event-log", default=None, help="optional JSONL event log path")
     parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
@@ -975,6 +1006,7 @@ def main() -> int:
         ws_host=args.ws_host,
         ws_port=args.ws_port,
         mqtt_config=mqtt_config,
+        tts_voice=args.tts_voice,
     )
     return 0 if bridge.start() else 1
 

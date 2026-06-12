@@ -76,7 +76,7 @@ If `audio_out` is true, `audio_params` is:
 }
 ```
 
-Audio is still local experimental beep by default. The `audio_stream` message shape is reserved for future PCM streaming and must return recoverable errors until streaming is explicitly implemented and enabled.
+Audio is disabled by default. When `CONFIG_OPENCLAW_AUDIO_ENABLE=y` and I2S initializes successfully, the device reports `audio_out=true` and `audio_stream_out=true`; otherwise audio commands return recoverable `audio unavailable` errors.
 
 ### Hello Field Stability
 
@@ -155,7 +155,7 @@ Audio beep ranges:
 - `duration_ms`: `20..2000`
 - `volume`: `0..100`
 
-Audio stream fields are reserved for future TTS PCM and microphone work:
+Audio stream fields for TTS PCM output:
 - `op`: `start`, `chunk`, or `stop`
 - `stream_id`: stable id for one stream
 - `direction`: `tts_out` or `mic_in`
@@ -165,7 +165,7 @@ Audio stream fields are reserved for future TTS PCM and microphone work:
 - `seq`: monotonically increasing chunk sequence
 - `data_b64`: base64 PCM chunk for `chunk`
 
-In the current firmware, `audio_stream` is a compatibility placeholder and returns a recoverable error unless a future audio streaming implementation is enabled.
+In the current firmware, `audio_stream` accepts `pcm_s16le` at 24000 Hz with 1 or 2 channels when audio is enabled. Mono chunks are duplicated to stereo before I2S output. Microphone input is still not implemented.
 
 Interrupt:
 - `{"action":"interrupt","source":"button"}` asks the body to stop speaking/listening visuals and return to idle.

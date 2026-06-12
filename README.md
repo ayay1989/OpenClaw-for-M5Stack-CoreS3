@@ -82,6 +82,14 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 
 ## 快速开始
 
+Windows 一键安装入口：
+
+```powershell
+install.bat
+```
+
+它会检查 Python/edge-tts，引导填写 WiFi 和 Windows 局域网 IP，生成本地固件配置，调用 ESP-IDF 烧录，启动 Windows Bridge，并用 Edge-TTS 做一次“你好”安装测试。
+
 如果你只是想先看 OpenClaw/StackChan 桥接层能不能跑，不需要 CoreS3：
 
 ```powershell
@@ -259,6 +267,7 @@ audio 验收：
 3. 先保持 `CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK=n`。
 4. 如硬件需要 MCLK，再开启 GPIO0 MCLK，同时确认 Button C 被禁用。
 5. `{"action":"beep","freq":880,"duration_ms":120,"volume":30}` 发出短音或返回明确的 `audio unavailable`。
+6. `{"action":"audio_stream","op":"start",...}` 只有在 `hello.features.audio_stream_out=true` 时才会向 AW88298 I2S 输出 PCM。
 
 v1.0 完整验收清单见协议文档末尾。
 

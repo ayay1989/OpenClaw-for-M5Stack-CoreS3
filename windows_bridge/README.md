@@ -66,6 +66,14 @@ CoreS3 的 `CONFIG_OPENCLAW_TCP_HOST` 需要填写 Windows 电脑在局域网里
 
 不要填写 `127.0.0.1`，因为对 CoreS3 来说那是设备自己。
 
+如果 CoreS3 日志显示 `EHOSTUNREACH`，优先检查：
+
+- Bridge 是否用 `--host 0.0.0.0 --port 8765` 启动。
+- `CONFIG_OPENCLAW_TCP_HOST` 是否是 Windows 当前局域网 IPv4。
+- Windows 防火墙是否允许 Python 监听 8765。
+- Windows 和 CoreS3 是否在同一个 WiFi/网段。
+- Bridge 启动后看起来“卡住”通常是正常等待连接；可用另一个终端访问 `http://127.0.0.1:8766/status` 验证。
+
 ## 手动测试命令
 
 Bridge 启动后可以直接输入：
@@ -372,6 +380,25 @@ python windows_bridge\openclaw_stackchan_bridge.py --host 0.0.0.0 --port 8765 --
 - `OPENCLAW_MQTT_TOPIC_PREFIX`
 - `OPENCLAW_MQTT_USERNAME`
 - `OPENCLAW_MQTT_PASSWORD`
+
+## Edge-TTS 安装测试
+
+Bridge 支持控制 API 里的 TTS 动作：
+
+```json
+{"action":"tts","text":"你好","voice":"zh-CN-YunxiNeural"}
+```
+
+推荐男声：
+
+- `zh-CN-YunxiNeural`
+- `zh-CN-YunjianNeural`
+
+执行逻辑：
+
+- 如果 CoreS3 报告 `audio_stream_out=true`，并且 Windows 有 `ffmpeg`，Bridge 会用 Edge-TTS 生成语音、转成 24kHz `pcm_s16le`，再通过 `audio_stream` 推到 CoreS3 AW88298 I2S。
+- 如果设备音频流不可用，Bridge 会退回 Windows 本机播放，同时让 StackChan 进入 speaking 表情。
+- 如果 edge-tts 或播放工具不可用，API 会返回 `mode=unavailable`，不会误报成设备已发声。
 
 ## 后续接 OpenClaw
 
