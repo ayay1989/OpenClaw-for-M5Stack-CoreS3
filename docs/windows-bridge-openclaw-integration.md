@@ -113,6 +113,20 @@ Recommended first implementation:
 
 CoreS3 should only execute safe `look` commands.
 
+The current repository includes this scaffold:
+
+- `windows_bridge/examples/face_tracking_loop.py`
+- normalized face coordinates as temporary detector input;
+- yaw/pitch safety limits;
+- smoothing and command rate limiting;
+- face-lost timeout that returns StackChan to center.
+
+Simulation:
+
+```powershell
+python windows_bridge\examples\face_tracking_loop.py --simulate --dry-run
+```
+
 ## Boundaries
 
 The Bridge may keep:

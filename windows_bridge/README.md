@@ -146,6 +146,38 @@ python windows_bridge\examples\resident_conversation_loop.py --tts
 
 这个脚本是接线骨架，不替代真实 ASR、OpenClaw 记忆库或 TTS 服务。真实模块接入后，应保留相同的身体调用顺序：`listening -> thinking -> speaking -> idle`。
 
+## 人脸追踪骨架
+
+`face_tracking_loop.py` 把人脸中心坐标转换成安全的 StackChan `look_at(yaw, pitch)` 命令。当前先支持模拟/手动输入，后续 Windows 摄像头或 OpenCV 检测器只需要把人脸位置喂给同一个 `FaceTracker.update()`。
+
+模拟运行，不发送真实命令：
+
+```powershell
+python windows_bridge\examples\face_tracking_loop.py --simulate --dry-run
+```
+
+手动输入归一化坐标：
+
+```powershell
+python windows_bridge\examples\face_tracking_loop.py
+```
+
+输入示例：
+
+```text
+0.50 0.50 1.0
+0.80 0.45 0.9
+lost
+```
+
+设计边界：
+
+- `x/y` 使用 `0..1`，画面中心是 `0.5/0.5`
+- yaw 默认限制在 `-35..35`
+- pitch 默认限制在 `12..55`
+- 有平滑和限频，避免舵机抖动
+- 人脸丢失超时后自动回正
+
 ## 压力反馈
 
 当前固件会把 CoreS3 触摸屏事件派生成压力事件：
