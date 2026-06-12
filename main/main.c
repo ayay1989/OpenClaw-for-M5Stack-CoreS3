@@ -13,6 +13,7 @@
 #include "driver/i2c.h"
 #include "esp_check.h"
 #include "esp_event.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"

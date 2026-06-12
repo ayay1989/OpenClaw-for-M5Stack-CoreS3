@@ -14,6 +14,7 @@ idf_component_register(
         nvs_flash
         driver
         json
+        esp_timer
 )
 
 target_link_libraries(${COMPONENT_LIB} PRIVATE m)
