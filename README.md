@@ -4,7 +4,7 @@
 
 这个仓库包含两部分：
 
-- **CoreS3 固件**：纯 C / ESP-IDF v5.x，运行在 M5Stack CoreS3 上，负责表情、灯光、触摸/压力、按键、心跳、舵机动作和可选 beep。
+- **CoreS3 固件**：纯 C / ESP-IDF v5.x，运行在 M5Stack CoreS3 上，负责表情、灯光、触摸/手势/身体交互、按键、心跳、舵机动作和可选 beep。
 - **Windows Bridge**：运行在 OpenClaw 所在的 Windows 电脑上，接收 CoreS3 TCP 连接，并给 OpenClaw、ASR、TTS、人脸追踪模块提供本机控制 API。
 
 它的目标不是把长期记忆塞进设备，而是让 OpenClaw 带着 Windows 电脑里的记忆“住进”StackChan：OpenClaw 思考、记忆、说话；StackChan 显示表情、转头、发光、感知触摸，并把身体事件送回 OpenClaw。
@@ -15,7 +15,7 @@
 - **纯 ESP-IDF 固件**：不用 Arduino，不用 C++，适配 M5Stack CoreS3 / ESP32-S3。
 - **稳定 JSON 协议**：TCP 和串口都使用“一行一个 JSON”，方便调试和扩展。
 - **StackChan 表情与 presence 状态**：支持 8 个表情，以及 listening、thinking、speaking、sleeping、online idle 等身体状态。
-- **触摸/压力反馈**：CoreS3 触摸屏会派生 `pressure press/hold/release`，OpenClaw 可以知道“被摸到了”。
+- **身体交互反馈**：CoreS3 触摸屏会识别点击、双击、长按、滑动，并派生 `pressure press/hold/release`，OpenClaw 可以知道“被摸到了”。
 - **动作与人脸追踪接口**：支持安全 yaw/pitch `look` 命令和 nod/shake/tilt/center 动作；Windows 侧提供可选 OpenCV 摄像头适配。
 - **语音对话骨架**：Windows 侧提供可插拔 ASR 输入、HTTP OpenClaw brain adapter、系统 TTS wrapper 和说话状态同步。
 - **OpenClaw 身体工具层**：提供 `self.emotion.*`、`self.motion.*`、`self.led.*`、`self.experience.*` 等可调用工具，避免上层拼低级命令。
@@ -39,9 +39,9 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 本项目的目标是让 **OpenClaw 成为大脑，StackChan 成为身体**。
 
 - OpenClaw / Windows 侧负责长期记忆、会话、人格、ASR、TTS、人脸识别和决策。
-- CoreS3 / StackChan 侧负责表情、灯光、触摸/压力事件、按键、心跳和舵机动作。
+- CoreS3 / StackChan 侧负责表情、灯光、触摸/手势/身体交互事件、按键、心跳和舵机动作。
 - 设备端只保存短期会话状态，不保存长期记忆、事实、总结或 embedding。
-- 触摸压力反馈第一版来自 CoreS3 触摸屏：按下、长按、松开都会上报 `pressure` 事件；后续可替换或叠加外壳压力传感器。
+- 身体交互反馈第一版来自 CoreS3 触摸屏：轻按/点击、双击、长按、滑动会作为 `gesture` 上报；按下、持续接触、松开会作为 `pressure` 上报。后续可叠加外壳触摸、FSR 压力片、IMU 摇晃/拿起等传感器，但对 OpenClaw 仍保持统一的身体事件语义。
 
 ## 当前能力
 
@@ -53,8 +53,8 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 - ILI9341 LCD 全屏表情显示
 - Stackchan 风格表情：`happy`、`normal`、`sad`、`angry`、`surprised`、`sleepy`、`shy`、`love`
 - SK6812 / NeoPixel 灯光控制与呼吸灯
-- 触摸事件与手势：点击、双击、长按、上下左右滑动
-- 触摸派生压力反馈：`press`、`hold`、`release`
+- 触摸与手势：轻按/点击、双击、长按、上下左右滑动
+- 身体交互反馈：触摸派生 `press`、`hold`、`release`，后续可扩展外壳压力和摇晃/拿起事件
 - A/B/C 按键事件上报
 - OpenClaw resident presence 状态层
 - 短期 `memory_context` 接入，不在设备端保存长期记忆

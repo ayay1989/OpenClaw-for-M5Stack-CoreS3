@@ -919,6 +919,7 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "touch", s_tactile_available);
     cJSON_AddBoolToObject(features, "gesture", s_tactile_available);
     cJSON_AddBoolToObject(features, "pressure", s_tactile_available);
+    cJSON_AddBoolToObject(features, "body_input", s_tactile_available);
     cJSON_AddBoolToObject(features, "tactile", s_tactile_available);
     cJSON_AddBoolToObject(features, "presence", true);
     cJSON_AddBoolToObject(features, "memory_context", true);
@@ -983,6 +984,7 @@ void protocol_emit_button(const char *pin, const char *action)
 {
     const char *intent = button_intent(pin, action);
     apply_local_intent(intent);
+    protocol_emit_body_input("button", action, pin, -1, -1, action != NULL && strcmp(action, "press") == 0 ? 100 : 0, intent);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "button");
     cJSON_AddStringToObject(root, "pin", pin);
@@ -993,8 +995,34 @@ void protocol_emit_button(const char *pin, const char *action)
     cJSON_Delete(root);
 }
 
+void protocol_emit_body_input(const char *input, const char *action, const char *source,
+                              int x, int y, int intensity, const char *intent)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event", "body_input");
+    cJSON_AddStringToObject(root, "input", input != NULL ? input : "unknown");
+    cJSON_AddStringToObject(root, "action", action != NULL ? action : "unknown");
+    if (source != NULL && source[0] != '\0') {
+        cJSON_AddStringToObject(root, "source", source);
+    }
+    if (x >= 0 && y >= 0) {
+        cJSON_AddNumberToObject(root, "x", x);
+        cJSON_AddNumberToObject(root, "y", y);
+    }
+    if (intensity >= 0) {
+        cJSON_AddNumberToObject(root, "intensity", intensity);
+    }
+    if (intent != NULL && intent[0] != '\0') {
+        cJSON_AddStringToObject(root, "intent", intent);
+    }
+    presence_add_json(root);
+    send_json(root);
+    cJSON_Delete(root);
+}
+
 void protocol_emit_touch(int x, int y)
 {
+    protocol_emit_body_input("touch", "contact", "touchscreen", x, y, 30, "attention");
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "touch");
     cJSON_AddNumberToObject(root, "x", x);
@@ -1007,6 +1035,7 @@ void protocol_emit_touch(int x, int y)
 
 void protocol_emit_pressure(const char *action, int x, int y, int intensity)
 {
+    protocol_emit_body_input("touch", action, "touchscreen", x, y, intensity, "tactile_contact");
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "pressure");
     cJSON_AddStringToObject(root, "source", "touchscreen");
@@ -1025,6 +1054,7 @@ void protocol_emit_gesture(const char *gesture, int x, int y)
     const char *intent = gesture_intent(gesture);
     apply_local_intent(intent);
     body_apply_touch_gesture(gesture);
+    protocol_emit_body_input("gesture", gesture, "touchscreen", x, y, 60, intent);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "gesture");
     cJSON_AddStringToObject(root, "gesture", gesture);

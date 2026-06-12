@@ -69,8 +69,10 @@ def validate_sample_against_contract(message: dict[str, Any]) -> None:
             fail("mcp payload must be JSON-RPC 2.0")
         return
     if "event" in message:
-        if message["event"] not in {"button", "touch", "pressure", "gesture", "heartbeat"}:
+        if message["event"] not in {"button", "touch", "pressure", "gesture", "body_input", "heartbeat"}:
             fail("unknown event type")
+        if message["event"] == "body_input" and not message.get("input"):
+            fail("body_input requires input")
         return
     if "status" in message:
         if message["status"] not in {"ok", "error"}:

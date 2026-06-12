@@ -245,9 +245,22 @@ lost
 - 有平滑和限频，避免舵机抖动
 - 人脸丢失超时后自动回正
 
-## 压力反馈
+## 身体交互反馈
 
-当前固件会把 CoreS3 触摸屏事件派生成压力事件：
+当前固件会把 CoreS3 触摸屏事件拆成两类身体事件：
+
+- `gesture`：轻按/点击、双击、长按、上下左右滑动。
+- `pressure`：接触开始、持续接触、接触结束。
+
+同时固件会额外上报统一的 `body_input`，这是 OpenClaw 优先消费的身体交互输入：
+
+```json
+{"event":"body_input","input":"touch","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80,"intent":"tactile_contact"}
+{"event":"body_input","input":"gesture","source":"touchscreen","action":"double_tap","x":120,"y":200,"intensity":60,"intent":"summon"}
+{"event":"body_input","input":"motion","source":"imu","action":"shake","intensity":75,"intent":"attention"}
+```
+
+触摸派生的 `pressure` 示例：
 
 ```json
 {"event":"pressure","source":"touchscreen","action":"press","x":120,"y":200,"intensity":40}
@@ -269,7 +282,7 @@ Bridge 默认会做轻量自动反应：
 
 这些只是身体层的临时反射，不替代 OpenClaw 的长期记忆和对话决策。接入真正 OpenClaw 后，可以用 `--no-auto-react` 关闭。
 
-未来如果增加 FSR 压力片或外壳触摸传感器，仍然复用 `pressure` 事件，只需要把 `source` 改成更具体的位置，例如 `head_fsr`、`body_fsr`。
+未来如果增加 FSR 压力片、外壳触摸传感器或 IMU 摇晃/拿起检测，仍然复用身体事件语义：接触类事件继续走 `pressure`，动作/姿态类事件可以走 `gesture` 或新增更明确的事件类型；同时把 `source` 改成更具体的位置，例如 `head_fsr`、`body_fsr`、`shell_touch`、`imu`。
 
 ## 无硬件模拟验收
 

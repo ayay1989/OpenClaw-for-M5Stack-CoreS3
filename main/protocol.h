@@ -19,4 +19,6 @@ void protocol_emit_button(const char *pin, const char *action);
 void protocol_emit_touch(int x, int y);
 void protocol_emit_pressure(const char *action, int x, int y, int intensity);
 void protocol_emit_gesture(const char *gesture, int x, int y);
+void protocol_emit_body_input(const char *input, const char *action, const char *source,
+                              int x, int y, int intensity, const char *intent);
 void protocol_emit_heartbeat(void);

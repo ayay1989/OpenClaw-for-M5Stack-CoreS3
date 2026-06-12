@@ -467,6 +467,14 @@ class StackChanBridge:
 
     def _print_event(self, message: dict[str, Any]) -> None:
         event = message.get("event")
+        if event == "body_input":
+            print(
+                "[body_input] "
+                f"input={message.get('input')} action={message.get('action')} "
+                f"source={message.get('source')} intensity={message.get('intensity')} "
+                f"x={message.get('x')} y={message.get('y')} intent={message.get('intent')}"
+            )
+            return
         if event == "pressure":
             print(
                 "[pressure] "
@@ -491,6 +499,34 @@ class StackChanBridge:
 
     def _apply_auto_reaction(self, message: dict[str, Any]) -> None:
         event = message.get("event")
+        if event == "body_input":
+            input_kind = message.get("input")
+            action = message.get("action")
+            source = message.get("source")
+            if input_kind == "touch":
+                if action in {"press", "contact"}:
+                    self._auto_send("pressure_press", 1.5, {"action": "presence", "state": "listening", "emotion": "happy"})
+                elif action == "hold":
+                    self._auto_send("pressure_hold", 3.0, {"action": "presence", "state": "speaking", "emotion": "love", "mouth": True})
+                    self._auto_send("pressure_hold_motion", 3.0, {"action": "motion", "gesture": "nod"})
+                elif action == "release":
+                    self._auto_send("pressure_release", 1.5, {"action": "presence", "state": "online_idle", "emotion": "happy"})
+            elif input_kind == "gesture":
+                if action == "double_tap":
+                    self._auto_send("gesture_double_tap", 1.5, {"action": "presence", "state": "listening", "emotion": "surprised"})
+                elif action == "long_press":
+                    self._auto_send("gesture_long_press", 2.0, {"action": "sleep", "enabled": True})
+            elif input_kind == "button" and action == "press":
+                if source == "A":
+                    self._auto_send("button_a", 1.0, {"action": "presence", "state": "listening", "emotion": "normal"})
+                elif source == "B":
+                    self._auto_send("button_b", 1.0, {"action": "presence", "state": "online_idle", "emotion": "normal"})
+                elif source == "C":
+                    self._auto_send("button_c", 1.0, {"action": "motion", "gesture": "center"})
+            elif input_kind == "motion" and action == "shake":
+                self._auto_send("body_shake", 2.0, {"action": "presence", "state": "listening", "emotion": "surprised"})
+            return
+
         if event == "pressure":
             action = message.get("action")
             if action == "press":

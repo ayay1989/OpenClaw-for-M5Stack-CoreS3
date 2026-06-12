@@ -25,6 +25,25 @@ class EventsRuntimeTest(unittest.TestCase):
         assert interrupt is not None
         self.assertEqual(interrupt.action, "interrupt")
 
+    def test_body_input_events_map_to_intents(self) -> None:
+        hold = intent_from_event({"kind": "body_input", "message": {"event": "body_input", "input": "touch", "action": "hold"}})
+        self.assertIsNotNone(hold)
+        assert hold is not None
+        self.assertEqual(hold.kind, "body_input")
+        self.assertEqual(hold.action, "comfort_contact")
+
+        shake = intent_from_event({"kind": "body_input", "message": {"event": "body_input", "input": "motion", "action": "shake"}})
+        self.assertIsNotNone(shake)
+        assert shake is not None
+        self.assertEqual(shake.action, "shake")
+
+        interrupt = intent_from_event(
+            {"kind": "body_input", "message": {"event": "body_input", "input": "button", "source": "B", "action": "press"}}
+        )
+        self.assertIsNotNone(interrupt)
+        assert interrupt is not None
+        self.assertEqual(interrupt.action, "interrupt")
+
     def test_strongest_intent_prefers_priority(self) -> None:
         intent = strongest_intent(
             [

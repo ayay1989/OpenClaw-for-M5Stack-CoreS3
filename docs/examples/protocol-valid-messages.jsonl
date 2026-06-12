@@ -9,8 +9,10 @@
 {"action":"interrupt","source":"button"}
 {"type":"hello_ack","session_id":"demo-session","resident_id":"openclaw"}
 {"type":"memory_context","session_id":"demo-session","resident_id":"openclaw","ttl_ms":3600000}
+{"event":"body_input","input":"touch","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80,"intent":"tactile_contact"}
+{"event":"body_input","input":"motion","source":"imu","action":"shake","intensity":75,"intent":"attention"}
 {"event":"pressure","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80}
 {"event":"heartbeat","uptime":12345,"wifi_rssi":-45,"motion_available":true,"audio_out_available":false,"presence_state":"online_idle","connection_state":"openclaw_ready","emotion":"happy","memory_context_loaded":true}
 {"status":"ok","action":"emotion","value":"happy"}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/list","id":2}}
-{"type":"hello","name":"openclaw-stackchan-cores3","version":"1.0.0","protocol":"openclaw-stackchan","protocol_version":1,"transport":"tcp-json","features":{"mcp":true,"emotion":true,"led":true,"touch":true,"gesture":true,"pressure":true,"tactile":true,"presence":true,"memory_context":true,"motion":false,"servo":false,"audio_in":false,"audio_out":false,"audio_stream_out":false,"wake_word":false,"echo_cancellation":false,"websocket":false,"mqtt":false,"ota":false,"multi_device":false},"device":{"device_id":"demo","model":"m5stack-cores3"},"resident":{"supported":true,"memory_context":true},"emotions":["happy","normal","sad","angry","surprised","sleepy","shy","love"]}
+{"type":"hello","name":"openclaw-stackchan-cores3","version":"1.0.0","protocol":"openclaw-stackchan","protocol_version":1,"transport":"tcp-json","features":{"mcp":true,"emotion":true,"led":true,"touch":true,"gesture":true,"pressure":true,"body_input":true,"tactile":true,"presence":true,"memory_context":true,"motion":false,"servo":false,"audio_in":false,"audio_out":false,"audio_stream_out":false,"wake_word":false,"echo_cancellation":false,"websocket":false,"mqtt":false,"ota":false,"multi_device":false},"device":{"device_id":"demo","model":"m5stack-cores3"},"resident":{"supported":true,"memory_context":true},"emotions":["happy","normal","sad","angry","surprised","sleepy","shy","love"]}

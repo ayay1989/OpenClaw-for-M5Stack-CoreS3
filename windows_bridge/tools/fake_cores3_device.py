@@ -48,6 +48,7 @@ def run(host: str, port: int) -> None:
                     "touch": True,
                     "gesture": True,
                     "pressure": True,
+                    "body_input": True,
                     "tactile": True,
                     "presence": True,
                     "motion": True,
@@ -64,10 +65,20 @@ def run(host: str, port: int) -> None:
         time.sleep(0.5)
         send_json(sock, {"event": "heartbeat", "uptime": 1, "wifi_rssi": -35, "motion_available": True})
         time.sleep(0.5)
+        send_json(sock, {"event": "body_input", "input": "touch", "source": "touchscreen", "action": "press", "x": 120, "y": 200, "intensity": 40, "intent": "tactile_contact"})
+        time.sleep(0.2)
         send_json(sock, {"event": "pressure", "source": "touchscreen", "action": "press", "x": 120, "y": 200, "intensity": 40})
         time.sleep(0.5)
+        send_json(sock, {"event": "body_input", "input": "touch", "source": "touchscreen", "action": "hold", "x": 120, "y": 200, "intensity": 80, "intent": "tactile_contact"})
+        time.sleep(0.2)
         send_json(sock, {"event": "pressure", "source": "touchscreen", "action": "hold", "x": 120, "y": 200, "intensity": 80})
         time.sleep(0.5)
+        send_json(sock, {"event": "body_input", "input": "gesture", "source": "touchscreen", "action": "double_tap", "x": 120, "y": 200, "intensity": 60, "intent": "summon"})
+        time.sleep(0.2)
+        send_json(sock, {"event": "body_input", "input": "motion", "source": "imu", "action": "shake", "intensity": 75, "intent": "attention"})
+        time.sleep(0.2)
+        send_json(sock, {"event": "body_input", "input": "touch", "source": "touchscreen", "action": "release", "x": 120, "y": 200, "intensity": 0, "intent": "tactile_contact"})
+        time.sleep(0.2)
         send_json(sock, {"event": "pressure", "source": "touchscreen", "action": "release", "x": 120, "y": 200, "intensity": 0})
         time.sleep(3.0)
 

@@ -42,6 +42,7 @@ Important fields:
     "touch": true,
     "gesture": true,
     "pressure": true,
+    "body_input": true,
     "tactile": true,
     "presence": true,
     "memory_context": true,
@@ -62,6 +63,8 @@ Important fields:
 ```
 
 `touch`, `gesture`, `pressure`, `tactile`, `motion`, `servo`, and `audio_out` are runtime capability flags. They are true only when the related subsystem initialized successfully.
+
+`pressure` is the stable tactile/contact event family, not a promise that every build has a physical pressure pad. In v1 it is derived from touch contact. Future shell touch, FSR pressure pads, IMU shake/pickup, or other body sensors should keep the same high-level body event semantics where possible.
 
 If `audio_out` is true, `audio_params` is:
 
@@ -191,6 +194,16 @@ These errors are recoverable. OpenClaw should keep the resident session alive an
 
 ## Events
 
+Body interaction input:
+
+```json
+{"event":"body_input","input":"touch","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80,"intent":"tactile_contact"}
+{"event":"body_input","input":"gesture","source":"touchscreen","action":"double_tap","x":120,"y":200,"intensity":60,"intent":"summon"}
+{"event":"body_input","input":"motion","source":"imu","action":"shake","intensity":75,"intent":"attention"}
+```
+
+`body_input` is the preferred OpenClaw-facing event for physical interaction. Legacy `touch`, `pressure`, `gesture`, and `button` events remain available for compatibility and low-level debugging.
+
 Button:
 
 ```json
@@ -211,7 +224,7 @@ Pressure/tactile contact:
 {"event":"pressure","source":"touchscreen","action":"release","x":120,"y":200,"intensity":0,"intent":"tactile_contact"}
 ```
 
-In v1, pressure is derived from the CoreS3 FT6336 touch panel so OpenClaw can react when the robot is touched. Future shell, head, or body pressure sensors should reuse the same event shape and set a more specific `source`.
+In v1, pressure is derived from the CoreS3 FT6336 touch panel so OpenClaw can react when the robot is touched. Future shell touch sensors, head/body FSR pressure sensors, or IMU-based shake/pickup detection should reuse the same body-event vocabulary where possible and set a more specific `source`, for example `head_fsr`, `body_fsr`, `shell_touch`, or `imu`.
 
 Gesture:
 
