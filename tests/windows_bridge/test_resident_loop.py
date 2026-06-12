@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import unittest
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "windows_bridge"))
 
 from openclaw_bridge import DemoBrainAdapter  # noqa: E402
+from openclaw_bridge import HttpBrainAdapter  # noqa: E402
 from openclaw_bridge import ResidentConversationLoop  # noqa: E402
 from openclaw_bridge import SystemTts  # noqa: E402
+from tools.fake_openclaw_brain import make_handler  # noqa: E402
+from http.server import ThreadingHTTPServer
 
 
 class FakeBody:
@@ -63,6 +67,23 @@ class ResidentLoopTest(unittest.TestCase):
         reply = loop.run_once("在吗")
         self.assertEqual(reply.emotion, "love")
         self.assertIn("摸我", reply.text)
+
+    def test_http_brain_adapter_accepts_fake_openclaw(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            host, port = server.server_address
+            brain = HttpBrainAdapter(f"http://{host}:{port}/chat")
+            reply = brain.reply(
+                "你好",
+                [{"kind": "pressure", "message": {"event": "pressure", "action": "hold"}}],
+            )
+            self.assertEqual(reply.emotion, "love")
+            self.assertIn("fake OpenClaw", reply.text)
+        finally:
+            server.shutdown()
+            server.server_close()
 
 
 if __name__ == "__main__":

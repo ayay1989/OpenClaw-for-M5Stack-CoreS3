@@ -26,7 +26,7 @@ The device must not persist long-term OpenClaw memory.
 
 ## Milestone 1: Body Contract
 
-Status: in progress.
+Status: repository-ready, pending hardware validation.
 
 Firmware side:
 - Stable TCP/serial JSON protocol.
@@ -43,12 +43,14 @@ Windows Bridge side:
 - Command helpers for emotion, presence, LED, look, motion, and beep.
 - Local HTTP control API for OpenClaw and future ASR/TTS/vision adapters.
 - Fake CoreS3 device and unit tests for no-hardware validation.
+- Fake OpenClaw brain and no-hardware check script.
 
 Acceptance:
 - Touching the robot produces both `touch` and `pressure` events in Windows logs.
 - Missing motion/audio hardware does not break the session.
 - OpenClaw can set face, light, presence, and head motion through one bridge API.
 - Without hardware, the fake CoreS3 device can exercise hello, heartbeat, pressure, and command delivery.
+- Without real OpenClaw, the fake brain can exercise the resident conversation loop.
 
 ## Milestone 2: Conversation Loop
 
@@ -74,6 +76,7 @@ Acceptance:
 - User can speak to Windows.
 - OpenClaw answers with remembered context.
 - StackChan face and motion follow listening/thinking/speaking states.
+- Repository scaffold is ready; real ASR/OpenClaw/TTS endpoints are still local integration work.
 
 ## Milestone 3: Face Tracking
 
@@ -90,6 +93,7 @@ Windows Bridge side:
 Acceptance:
 - StackChan looks toward the user without jitter.
 - Face loss does not leave servos at extreme angles.
+- Repository scaffold is ready; real camera detector is still local integration work.
 
 ## Milestone 4: Rich Tactile Feedback
 

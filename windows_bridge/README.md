@@ -38,6 +38,12 @@ python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\conf
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --face-sim
 ```
 
+无硬件一键检查：
+
+```powershell
+python windows_bridge\tools\run_no_hardware_checks.py
+```
+
 CoreS3 的 `CONFIG_OPENCLAW_TCP_HOST` 需要填写 Windows 电脑在局域网里的 IPv4 地址，例如：
 
 ```text
@@ -146,6 +152,12 @@ python windows_bridge\examples\resident_conversation_loop.py
 
 ```powershell
 python windows_bridge\examples\resident_conversation_loop.py --openclaw-url http://127.0.0.1:8899/chat
+```
+
+没有真实 OpenClaw 时，可以先启动 fake brain：
+
+```powershell
+python windows_bridge\tools\fake_openclaw_brain.py --port 8899
 ```
 
 开启系统 TTS：
