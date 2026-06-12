@@ -63,6 +63,8 @@ Windows Bridge side:
 - Windows microphone to ASR.
 - ASR text to OpenClaw.
 - OpenClaw response to TTS.
+- Short-lived OpenClaw memory context is forwarded to the brain adapter.
+- Experience-level body tools wrap common actions like speaking, touch reaction, and sleep mode.
 - TTS playback route:
   - first: Windows speaker for fast validation;
   - later: stream PCM to StackChan when firmware audio is ready.

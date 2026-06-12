@@ -8,6 +8,7 @@ from typing import Any
 
 from .body_client import StackChanBodyClient
 from .events import BodyIntent, intent_from_event, intents_from_events
+from .memory_context import MemoryContext
 from .resident_loop import BrainAdapter, BrainReply, SystemTts
 
 
@@ -55,6 +56,7 @@ class LifeCycleManager:
         tts: SystemTts,
         sleep_timeout_s: float = 300.0,
         proactive_cooldown_s: float = 8.0,
+        memory_context: MemoryContext | None = None,
     ) -> None:
         self.body = body
         self.brain = brain
@@ -68,6 +70,9 @@ class LifeCycleManager:
         self.memory_context_loaded = False
         self.openclaw_connected = False
         self.face_tracking_enabled = False
+        self.memory_context = memory_context
+        if memory_context is not None:
+            self.memory_context_loaded = memory_context.is_loaded()
 
     def mark_activity(self, now: float) -> None:
         self.last_activity_at = now
@@ -116,7 +121,7 @@ class LifeCycleManager:
     def speak_proactively(self, action: ProactiveAction, recent_events: list[dict[str, Any]]) -> BrainReply:
         self.state = LifeState.THINKING
         self.body.start_thinking()
-        reply = self.brain.reply(action.prompt, recent_events)
+        reply = self.brain.reply(action.prompt, recent_events, self.memory_context)
         self.state = LifeState.SPEAKING
         self.body.start_speaking(reply.emotion)
         if reply.gesture:

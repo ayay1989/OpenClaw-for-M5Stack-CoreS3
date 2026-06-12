@@ -27,10 +27,14 @@ def main() -> int:
             "windows_bridge/openclaw_stackchan_bridge.py",
             "windows_bridge/openclaw_bridge/__init__.py",
             "windows_bridge/openclaw_bridge/body_client.py",
+            "windows_bridge/openclaw_bridge/body_tools.py",
+            "windows_bridge/openclaw_bridge/camera_vision.py",
             "windows_bridge/openclaw_bridge/events.py",
             "windows_bridge/openclaw_bridge/face_tracking.py",
             "windows_bridge/openclaw_bridge/resident_loop.py",
+            "windows_bridge/openclaw_bridge/memory_context.py",
             "windows_bridge/openclaw_bridge/runtime.py",
+            "windows_bridge/openclaw_bridge/speech.py",
             "windows_bridge/examples/openclaw_body_client.py",
             "windows_bridge/examples/resident_conversation_loop.py",
             "windows_bridge/examples/face_tracking_loop.py",
@@ -41,6 +45,7 @@ def main() -> int:
     )
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--face-sim"])
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--life-demo"])
+    run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--tools-list"])
     print("[check] no-hardware validation passed")
     return 0
 

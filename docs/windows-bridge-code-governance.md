@@ -14,6 +14,9 @@ Reusable logic belongs in:
   - Brain adapter interface.
   - Demo and generic HTTP brain adapters.
   - System TTS wrapper.
+- `windows_bridge/openclaw_bridge/body_tools.py`
+  - OpenClaw-callable low-level and experience-level body tools.
+  - Argument clamping and tool-to-device-command mapping.
 - `windows_bridge/openclaw_bridge/face_tracking.py`
   - Face observation model.
   - Safe yaw/pitch conversion.
@@ -25,6 +28,10 @@ Reusable logic belongs in:
   - Sleep/wake state.
   - Event-triggered proactive responses.
   - Local status overlay summaries.
+- `windows_bridge/openclaw_bridge/memory_context.py`
+  - Short-lived OpenClaw memory context loading and sanitization.
+- `windows_bridge/openclaw_bridge/speech.py`
+  - Speech duration cues used by speaking-state synchronization.
 - `windows_bridge/openclaw_bridge/runtime.py`
   - Runtime config loading.
   - Shared builders for body, resident conversation loop, and face tracking.
@@ -46,10 +53,11 @@ When adding real OpenClaw, ASR, TTS, or camera integrations:
 - Add adapter classes or new modules under `openclaw_bridge` when the code is reusable.
 - Keep hardware/model/vendor-specific startup flags in `examples` or `tools`.
 - Keep CoreS3 protocol payload construction inside `StackChanBodyClient`.
+- Keep high-level OpenClaw tools and presets in `body_tools.py`.
 - Keep body event semantics inside `events.py`.
 - Keep sleep/wake and proactive life behavior inside `lifecycle.py`.
 - Keep face-to-servo safety limits inside `FaceTracker`.
-- Keep long-term memory outside the bridge and outside CoreS3 firmware.
+- Keep long-term memory outside the bridge and outside CoreS3 firmware; only pass sanitized short-lived summaries through `memory_context.py`.
 
 ## Testing Rules
 
@@ -62,6 +70,7 @@ Current test responsibilities:
 - `test_face_tracking.py`: face coordinate mapping, rate limit, and lost-face recenter.
 - `test_events_runtime.py`: event intent mapping and runtime config behavior.
 - `test_lifecycle.py`: sleep/wake behavior, proactive actions, and status overlay summaries.
+- `test_body_tools_memory.py`: OpenClaw body tools, memory context, and speech cues.
 
 Before pushing:
 

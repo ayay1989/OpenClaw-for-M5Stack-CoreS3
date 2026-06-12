@@ -8,8 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "windows_bridge"))
 
+from openclaw_bridge import FaceBox  # noqa: E402
 from openclaw_bridge import FaceObservation  # noqa: E402
 from openclaw_bridge import FaceTracker  # noqa: E402
+from openclaw_bridge import observation_from_face_box  # noqa: E402
 from openclaw_bridge import parse_observation  # noqa: E402
 
 
@@ -54,6 +56,13 @@ class FaceTrackingTest(unittest.TestCase):
         self.assertEqual((payload.x, payload.y, payload.confidence), (0.1, 0.2, 0.3))
         lost = parse_observation("lost")
         self.assertEqual(lost.confidence, 0.0)
+
+    def test_face_box_to_observation(self) -> None:
+        observation = observation_from_face_box(640, 480, FaceBox(160, 120, 160, 120, 0.9), timestamp=10.0)
+        self.assertAlmostEqual(observation.x, 0.375)
+        self.assertAlmostEqual(observation.y, 0.375)
+        self.assertEqual(observation.confidence, 0.9)
+        self.assertEqual(observation.timestamp, 10.0)
 
 
 if __name__ == "__main__":

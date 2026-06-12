@@ -15,6 +15,13 @@ def build_reply(payload: dict[str, Any]) -> dict[str, Any]:
     events = payload.get("events")
     if not isinstance(events, list):
         events = []
+    memory_context = payload.get("memory_context")
+    if isinstance(memory_context, dict) and memory_context.get("summary") and "记得" in text:
+        return {
+            "text": f"fake OpenClaw 带着记忆回应：{memory_context.get('summary')}",
+            "emotion": "love",
+            "gesture": "nod",
+        }
     tactile = [event for event in events if event.get("kind") == "pressure"]
     if tactile:
         action = tactile[-1].get("message", {}).get("action")

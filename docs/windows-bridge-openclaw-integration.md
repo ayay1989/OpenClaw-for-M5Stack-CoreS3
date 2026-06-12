@@ -18,6 +18,12 @@ Endpoints:
 - `GET /events?limit=20`: recent body events.
 - `POST /command`: send a body command.
 
+Security:
+
+- Keep the control API on `127.0.0.1` for normal use.
+- If `--control-host` is not localhost, set `--control-token` or `OPENCLAW_BRIDGE_TOKEN`.
+- Event logs redact resident/session/memory fields before writing diagnostic JSONL.
+
 Command examples:
 
 ```json
@@ -101,6 +107,29 @@ The current repository includes this scaffold:
 - optional HTTP brain adapter for a local OpenClaw endpoint;
 - optional system TTS;
 - pressure events included in the recent event context sent to the brain.
+- optional short-lived `memory_context` forwarding to the brain;
+- speech duration cues for synchronizing body speaking state.
+
+## Body Tools
+
+OpenClaw can either send raw body commands through `/command`, or call the reusable Python tool router:
+
+- `self.emotion.set`
+- `self.presence.set`
+- `self.led.set_color`
+- `self.led.breath`
+- `self.motion.look_at`
+- `self.motion.center`
+- `self.motion.nod`
+- `self.motion.shake`
+- `self.motion.tilt`
+- `self.audio.beep`
+- `self.memory.cue`
+- `self.experience.start_speaking`
+- `self.experience.react_to_touch`
+- `self.experience.sleep_mode`
+
+The `self.experience.*` tools are intentionally higher-level. They keep common body choreography out of OpenClaw prompts and make later tuning safer.
 
 ## Face Tracking Loop
 
@@ -117,6 +146,7 @@ The current repository includes this scaffold:
 
 - `windows_bridge/examples/face_tracking_loop.py`
 - normalized face coordinates as temporary detector input;
+- optional OpenCV camera detector path;
 - yaw/pitch safety limits;
 - smoothing and command rate limiting;
 - face-lost timeout that returns StackChan to center.
@@ -135,6 +165,7 @@ The Bridge may keep:
 - Recent events.
 - Short-lived session identifiers.
 - Optional diagnostic event logs.
+- Short-lived memory context summaries passed from OpenClaw.
 
 The Bridge should not become:
 

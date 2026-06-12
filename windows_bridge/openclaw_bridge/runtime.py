@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .body_tools import BodyToolRouter
 from .body_client import StackChanBodyClient
 from .face_tracking import FaceObservation, FaceTracker, LookTarget
 from .lifecycle import LifeCycleManager
+from .memory_context import MemoryContext, load_memory_context
 from .resident_loop import ResidentConversationLoop, SystemTts, build_brain
 
 
@@ -23,6 +25,7 @@ class RuntimeConfig:
     face_lost_timeout_s: float = 2.0
     sleep_timeout_s: float = 300.0
     proactive_cooldown_s: float = 8.0
+    memory_context_path: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RuntimeConfig":
@@ -35,6 +38,7 @@ class RuntimeConfig:
             face_lost_timeout_s=float(payload.get("face_lost_timeout_s", 2.0)),
             sleep_timeout_s=float(payload.get("sleep_timeout_s", 300.0)),
             proactive_cooldown_s=float(payload.get("proactive_cooldown_s", 8.0)),
+            memory_context_path=payload.get("memory_context_path") or None,
         )
 
 
@@ -51,12 +55,21 @@ def build_body(config: RuntimeConfig) -> StackChanBodyClient:
     return StackChanBodyClient(config.bridge_url)
 
 
+def build_memory_context(config: RuntimeConfig) -> MemoryContext | None:
+    return load_memory_context(config.memory_context_path)
+
+
+def build_body_tools(config: RuntimeConfig) -> BodyToolRouter:
+    return BodyToolRouter(build_body(config))
+
+
 def build_conversation_loop(config: RuntimeConfig) -> ResidentConversationLoop:
     return ResidentConversationLoop(
         body=build_body(config),
         brain=build_brain(config.openclaw_url),
         tts=SystemTts(config.tts_enabled),
         event_limit=config.event_limit,
+        memory_context=build_memory_context(config),
     )
 
 
@@ -71,6 +84,7 @@ def build_lifecycle_manager(config: RuntimeConfig) -> LifeCycleManager:
         tts=SystemTts(config.tts_enabled),
         sleep_timeout_s=config.sleep_timeout_s,
         proactive_cooldown_s=config.proactive_cooldown_s,
+        memory_context=build_memory_context(config),
     )
 
 

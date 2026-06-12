@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import sys
 import threading
@@ -77,6 +78,7 @@ class StackChanBridge:
         control_port: int,
         auto_react: bool,
         event_log: str | None,
+        control_token: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -84,6 +86,7 @@ class StackChanBridge:
         self.control_port = control_port
         self.auto_react = auto_react
         self.event_log = event_log
+        self.control_token = control_token
 
         self.state = DeviceState()
         self._events: deque[BridgeEvent] = deque(maxlen=MAX_EVENTS)
@@ -196,6 +199,9 @@ class StackChanBridge:
 
         class ControlHandler(BaseHTTPRequestHandler):
             def do_GET(self) -> None:  # noqa: N802
+                if not self._authorized():
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "error": "unauthorized"})
+                    return
                 if self.path.startswith("/status"):
                     self._send_json(HTTPStatus.OK, {"ok": True, "state": bridge.state.to_public_dict()})
                     return
@@ -210,6 +216,9 @@ class StackChanBridge:
                 self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
 
             def do_POST(self) -> None:  # noqa: N802
+                if not self._authorized():
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "error": "unauthorized"})
+                    return
                 if self.path != "/command":
                     self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "not found"})
                     return
@@ -224,6 +233,11 @@ class StackChanBridge:
 
             def log_message(self, fmt: str, *args: Any) -> None:
                 print(f"[control] {self.address_string()} {fmt % args}")
+
+            def _authorized(self) -> bool:
+                if not bridge.control_token:
+                    return True
+                return self.headers.get("X-OpenClaw-Token") == bridge.control_token
 
             def _read_json_body(self) -> dict[str, Any]:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -272,6 +286,9 @@ class StackChanBridge:
                 self.wfile.write(body)
 
         try:
+            if not self._control_host_is_local() and not self.control_token:
+                print("[bridge] refusing remote control API without --control-token or OPENCLAW_BRIDGE_TOKEN")
+                return False
             self._http_server = ThreadingHTTPServer((self.control_host, self.control_port), ControlHandler)
         except OSError as exc:
             print(f"[bridge] cannot start control API on {self.control_host}:{self.control_port}: {exc}")
@@ -432,9 +449,17 @@ class StackChanBridge:
         if self.event_log:
             try:
                 with open(self.event_log, "a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(event.to_public_dict(), ensure_ascii=False, separators=(",", ":")) + "\n")
+                    fh.write(json.dumps(self._redact_event(event).to_public_dict(), ensure_ascii=False, separators=(",", ":")) + "\n")
             except OSError as exc:
                 print(f"[bridge] event log write failed: {exc}")
+
+    def _redact_event(self, event: BridgeEvent) -> BridgeEvent:
+        sensitive = {"session_id", "resident_id", "memory_context", "summary", "facts", "preferences", "token"}
+        message = {key: ("[redacted]" if key in sensitive else value) for key, value in event.message.items()}
+        return BridgeEvent(timestamp=event.timestamp, kind=event.kind, message=message)
+
+    def _control_host_is_local(self) -> bool:
+        return self.control_host in {"127.0.0.1", "localhost", "::1"}
 
     def _print_event(self, message: dict[str, Any]) -> None:
         event = message.get("event")
@@ -601,6 +626,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--control-host", default=DEFAULT_CONTROL_HOST, help="local API host, default 127.0.0.1")
     parser.add_argument("--control-port", default=DEFAULT_CONTROL_PORT, type=int, help="local API port, default 8766")
     parser.add_argument("--event-log", default=None, help="optional JSONL event log path")
+    parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
     return parser.parse_args()
 
@@ -614,6 +640,7 @@ def main() -> int:
         control_port=args.control_port,
         auto_react=not args.no_auto_react,
         event_log=args.event_log,
+        control_token=args.control_token,
     )
     return 0 if bridge.start() else 1
 

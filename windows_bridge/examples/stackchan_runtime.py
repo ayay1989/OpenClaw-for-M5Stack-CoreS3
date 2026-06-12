@@ -12,7 +12,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from openclaw_bridge import DemoBrainAdapter, LifeCycleManager, SystemTts  # noqa: E402
-from openclaw_bridge.runtime import build_body, build_conversation_loop, face_simulation_targets, load_config  # noqa: E402
+from openclaw_bridge.runtime import build_body, build_body_tools, build_conversation_loop, face_simulation_targets, load_config  # noqa: E402
 
 
 class DryRunBody:
@@ -59,6 +59,9 @@ def main() -> int:
     parser.add_argument("--face-sim", action="store_true", help="print deterministic face tracking targets")
     parser.add_argument("--life-status", action="store_true", help="print local life-cycle status overlay lines")
     parser.add_argument("--life-demo", action="store_true", help="run a deterministic life-cycle demo")
+    parser.add_argument("--tools-list", action="store_true", help="print OpenClaw-callable body tools")
+    parser.add_argument("--tool-call", default=None, help="call one body tool by name")
+    parser.add_argument("--tool-args", default="{}", help="JSON object for --tool-call")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -90,6 +93,17 @@ def main() -> int:
             "body_calls": body.calls,
         }
         print(json.dumps(output, ensure_ascii=False, indent=2))
+        return 0
+    if args.tools_list:
+        tools = build_body_tools(config).list_tools()
+        print(json.dumps([tool.__dict__ for tool in tools], ensure_ascii=False, indent=2))
+        return 0
+    if args.tool_call:
+        tool_args = json.loads(args.tool_args)
+        if not isinstance(tool_args, dict):
+            raise ValueError("--tool-args must be a JSON object")
+        result = build_body_tools(config).call(args.tool_call, tool_args)
+        print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
         return 0
 
     parser.print_help()

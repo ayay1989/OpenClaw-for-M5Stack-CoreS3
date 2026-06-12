@@ -3,6 +3,7 @@
   "openclaw_url": null,
   "tts_enabled": false,
   "event_limit": 20,
+  "memory_context_path": null,
   "face_yaw_limit": 35,
   "face_lost_timeout_s": 2.0,
   "sleep_timeout_s": 300.0,

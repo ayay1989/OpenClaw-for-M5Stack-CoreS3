@@ -13,10 +13,17 @@ from typing import Any, Protocol
 
 from .body_client import StackChanBodyClient
 from .events import strongest_intent
+from .memory_context import MemoryContext
+from .speech import build_speech_cue
 
 
 class BrainAdapter(Protocol):
-    def reply(self, user_text: str, recent_events: list[dict[str, Any]]) -> "BrainReply":
+    def reply(
+        self,
+        user_text: str,
+        recent_events: list[dict[str, Any]],
+        memory_context: MemoryContext | None = None,
+    ) -> "BrainReply":
         ...
 
 
@@ -28,7 +35,12 @@ class BrainReply:
 
 
 class DemoBrainAdapter:
-    def reply(self, user_text: str, recent_events: list[dict[str, Any]]) -> BrainReply:
+    def reply(
+        self,
+        user_text: str,
+        recent_events: list[dict[str, Any]],
+        memory_context: MemoryContext | None = None,
+    ) -> BrainReply:
         intent = strongest_intent(recent_events)
         if intent is not None:
             if intent.action == "comfort_contact":
@@ -43,6 +55,8 @@ class DemoBrainAdapter:
             return BrainReply("我听见了。我们慢一点说，我会陪着你。", "shy", "tilt")
         if any(word in user_text.lower() for word in ("sleep", "困", "睡")):
             return BrainReply("那我先安静一点，等你需要我再醒来。", "sleepy", None)
+        if memory_context and memory_context.is_loaded() and "记得" in user_text:
+            return BrainReply(f"我带着记忆在这里：{memory_context.summary or '已加载上下文'}", "love", "nod")
         return BrainReply(f"我收到啦：{user_text}", "happy", "nod")
 
 
@@ -59,8 +73,16 @@ class HttpBrainAdapter:
     def __init__(self, url: str) -> None:
         self.url = url
 
-    def reply(self, user_text: str, recent_events: list[dict[str, Any]]) -> BrainReply:
-        body = json.dumps({"text": user_text, "events": recent_events}, ensure_ascii=False).encode("utf-8")
+    def reply(
+        self,
+        user_text: str,
+        recent_events: list[dict[str, Any]],
+        memory_context: MemoryContext | None = None,
+    ) -> BrainReply:
+        payload: dict[str, Any] = {"text": user_text, "events": recent_events}
+        if memory_context is not None:
+            payload["memory_context"] = memory_context.to_brain_payload()
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
             self.url,
             data=body,
@@ -104,18 +126,27 @@ class SystemTts:
 
 
 class ResidentConversationLoop:
-    def __init__(self, body: StackChanBodyClient, brain: BrainAdapter, tts: SystemTts, event_limit: int) -> None:
+    def __init__(
+        self,
+        body: StackChanBodyClient,
+        brain: BrainAdapter,
+        tts: SystemTts,
+        event_limit: int,
+        memory_context: MemoryContext | None = None,
+    ) -> None:
         self.body = body
         self.brain = brain
         self.tts = tts
         self.event_limit = event_limit
+        self.memory_context = memory_context
 
     def run_once(self, user_text: str) -> BrainReply:
         self.body.start_listening()
         recent_events = self.body.poll_events(limit=self.event_limit)
         self.body.start_thinking()
-        reply = self.brain.reply(user_text, recent_events)
-        self.body.start_speaking(reply.emotion)
+        reply = self.brain.reply(user_text, recent_events, self.memory_context)
+        cue = build_speech_cue(reply.text, reply.emotion)
+        self.body.start_speaking(cue.emotion)
         if reply.gesture:
             self.body.motion(reply.gesture)
         self.tts.speak(reply.text)

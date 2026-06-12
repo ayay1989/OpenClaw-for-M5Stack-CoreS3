@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from openclaw_bridge import FaceObservation, FaceTracker, LookTarget, StackChanBodyClient, parse_observation  # noqa: E402
+from openclaw_bridge import FaceObservation, FaceTracker, LookTarget, OpenCvFaceDetector, StackChanBodyClient, parse_observation  # noqa: E402
 
 
 def send_target(body: StackChanBodyClient, target: LookTarget | None, dry_run: bool) -> None:
@@ -57,10 +57,25 @@ def run_stdin(body: StackChanBodyClient, tracker: FaceTracker, dry_run: bool) ->
         send_target(body, target, dry_run)
 
 
+def run_opencv_camera(body: StackChanBodyClient, tracker: FaceTracker, dry_run: bool, camera_index: int) -> None:
+    detector = OpenCvFaceDetector(camera_index=camera_index)
+    print("OpenCV camera face tracking started. Press Ctrl+C to stop.")
+    try:
+        for observation in detector.observations():
+            if observation.confidence < tracker.min_confidence:
+                send_target(body, tracker.mark_lost(), dry_run)
+                continue
+            send_target(body, tracker.update(observation), dry_run)
+    except KeyboardInterrupt:
+        send_target(body, LookTarget(0, tracker.pitch_center, 500), dry_run)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="StackChan face tracking adapter scaffold")
     parser.add_argument("--bridge-url", default="http://127.0.0.1:8766", help="Windows Bridge control API")
     parser.add_argument("--simulate", action="store_true", help="run a deterministic face-position simulation")
+    parser.add_argument("--opencv-camera", action="store_true", help="use an optional OpenCV camera detector")
+    parser.add_argument("--camera-index", default=0, type=int)
     parser.add_argument("--dry-run", action="store_true", help="print targets without sending look commands")
     parser.add_argument("--yaw-limit", default=35, type=int)
     parser.add_argument("--lost-timeout", default=2.0, type=float)
@@ -70,6 +85,8 @@ def main() -> int:
     tracker = FaceTracker(yaw_limit=args.yaw_limit, lost_timeout_s=args.lost_timeout)
     if args.simulate:
         run_simulation(body, tracker, args.dry_run)
+    elif args.opencv_camera:
+        run_opencv_camera(body, tracker, args.dry_run, args.camera_index)
     else:
         run_stdin(body, tracker, args.dry_run)
     return 0

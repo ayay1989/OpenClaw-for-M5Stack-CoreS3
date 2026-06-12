@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import socket
 import sys
+import tempfile
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -128,6 +130,59 @@ class BridgeTest(unittest.TestCase):
             self.assertEqual(result["device_command"], {"action": "emotion", "value": "love"})
         finally:
             bridge.stop()
+
+    def test_remote_control_host_requires_token(self) -> None:
+        bridge = StackChanBridge(
+            host="127.0.0.1",
+            port=0,
+            control_host="0.0.0.0",
+            control_port=0,
+            auto_react=False,
+            event_log=None,
+        )
+        self.assertFalse(bridge._start_control_server())
+
+    def test_control_api_token_auth(self) -> None:
+        bridge = StackChanBridge(
+            host="127.0.0.1",
+            port=0,
+            control_host="127.0.0.1",
+            control_port=0,
+            auto_react=False,
+            event_log=None,
+            control_token="test-value",
+        )
+        self.assertTrue(bridge._start_control_server())
+        try:
+            assert bridge._http_server is not None
+            host, port = bridge._http_server.server_address
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(f"http://{host}:{port}/status", timeout=3)
+            self.assertEqual(ctx.exception.code, 401)
+            request = urllib.request.Request(f"http://{host}:{port}/status", headers={"X-OpenClaw-Token": "test-value"})
+            with urllib.request.urlopen(request, timeout=3) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            self.assertTrue(data["ok"])
+        finally:
+            bridge.stop()
+
+    def test_event_log_redacts_resident_context(self) -> None:
+        with tempfile.NamedTemporaryFile("r", encoding="utf-8", suffix=".jsonl", delete=False) as fh:
+            path = fh.name
+        bridge = StackChanBridge(
+            host="127.0.0.1",
+            port=0,
+            control_host="127.0.0.1",
+            control_port=0,
+            auto_react=False,
+            event_log=path,
+        )
+        bridge._record_event({"event": "heartbeat", "session_id": "s1", "resident_id": "openclaw", "memory_context": {"summary": "private"}})
+        line = Path(path).read_text(encoding="utf-8").strip()
+        event = json.loads(line)
+        self.assertEqual(event["message"]["session_id"], "[redacted]")
+        self.assertEqual(event["message"]["resident_id"], "[redacted]")
+        self.assertEqual(event["message"]["memory_context"], "[redacted]")
 
     def test_body_client_uses_control_api(self) -> None:
         bridge = self.make_bridge(auto_react=False)

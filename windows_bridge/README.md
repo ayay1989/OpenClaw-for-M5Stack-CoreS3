@@ -28,7 +28,10 @@ python windows_bridge\openclaw_stackchan_bridge.py --host 0.0.0.0 --port 8765
 ```powershell
 python windows_bridge\openclaw_stackchan_bridge.py --control-port 8766 --event-log bridge-events.jsonl
 python windows_bridge\openclaw_stackchan_bridge.py --no-auto-react
+python windows_bridge\openclaw_stackchan_bridge.py --control-host 0.0.0.0 --control-token <本机随机token>
 ```
+
+控制 API 默认只绑定 `127.0.0.1`。如果改成局域网可访问地址，必须设置 `--control-token` 或环境变量 `OPENCLAW_BRIDGE_TOKEN`，否则 Bridge 会拒绝启动控制面，避免同网段设备直接控制 StackChan。
 
 统一 runtime 入口：
 
@@ -37,6 +40,7 @@ python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\conf
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --once "你好"
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --face-sim
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --life-demo
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --tools-list
 ```
 
 无硬件一键检查：
@@ -108,6 +112,28 @@ curl -X POST http://127.0.0.1:8766/command -H "Content-Type: application/json" -
 
 这就是后续 OpenClaw、ASR/TTS、人脸追踪模块优先调用的入口。
 
+## OpenClaw 身体工具
+
+`stackchan_runtime.py --tools-list` 会列出 OpenClaw 可调用的身体工具。低层工具用于精细控制，高层 `self.experience.*` 工具用于常见体验：
+
+- `self.emotion.set`：切换表情。
+- `self.presence.set`：切换 listening/thinking/speaking/sleeping 等状态。
+- `self.motion.look_at`、`self.motion.nod`、`self.motion.shake`：头部动作。
+- `self.led.set_color`、`self.led.breath`：灯光。
+- `self.memory.cue`：提示“OpenClaw 记忆上下文已加载”。
+- `self.experience.start_speaking`：开始说话状态，自动打开嘴型。
+- `self.experience.react_to_touch`：被摸/被安抚时的组合反应。
+- `self.experience.sleep_mode`：安静睡眠组合反应。
+
+示例：
+
+```powershell
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --tool-call self.experience.react_to_touch
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --tool-call self.motion.look_at --tool-args "{\"yaw\":10,\"pitch\":30}"
+```
+
+这些工具仍然通过本机 Bridge 发命令；如果 CoreS3 没有连接，命令会排队或按现有降级逻辑处理。
+
 ## OpenClaw 调用示例
 
 仓库里提供了一个轻量 Python client：
@@ -169,6 +195,8 @@ python windows_bridge\examples\resident_conversation_loop.py --tts
 
 这个脚本是接线骨架，不替代真实 ASR、OpenClaw 记忆库或 TTS 服务。真实模块接入后，应保留相同的身体调用顺序：`listening -> thinking -> speaking -> idle`。
 
+如果 `config.example.json` 里设置了 `memory_context_path`，HTTP brain 请求会带上短期 `memory_context`。它只用于 Windows/OpenClaw 侧生成回复，CoreS3 不保存长期记忆。
+
 ## 人脸追踪骨架
 
 `face_tracking_loop.py` 把人脸中心坐标转换成安全的 StackChan `look_at(yaw, pitch)` 命令。当前先支持模拟/手动输入，后续 Windows 摄像头或 OpenCV 检测器只需要把人脸位置喂给同一个 `FaceTracker.update()`。
@@ -177,6 +205,13 @@ python windows_bridge\examples\resident_conversation_loop.py --tts
 
 ```powershell
 python windows_bridge\examples\face_tracking_loop.py --simulate --dry-run
+```
+
+使用 Windows 摄像头和可选 OpenCV：
+
+```powershell
+pip install opencv-python
+python windows_bridge\examples\face_tracking_loop.py --opencv-camera --dry-run
 ```
 
 手动输入归一化坐标：
