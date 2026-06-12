@@ -57,6 +57,12 @@ def validate_sample_against_contract(message: dict[str, Any]) -> None:
         return
     if message.get("type") in {"hello_ack", "memory_context"}:
         return
+    if message.get("type") == "hello":
+        if message.get("protocol") != "openclaw-stackchan":
+            fail("hello protocol must be openclaw-stackchan")
+        if not isinstance(message.get("features"), dict):
+            fail("hello requires features object")
+        return
     if message.get("type") == "mcp":
         payload = message.get("payload")
         if not isinstance(payload, dict) or payload.get("jsonrpc") != "2.0":

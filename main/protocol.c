@@ -926,6 +926,13 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "servo", body_motion_available());
     cJSON_AddBoolToObject(features, "audio_in", false);
     cJSON_AddBoolToObject(features, "audio_out", audio_is_available());
+    cJSON_AddBoolToObject(features, "audio_stream_out", false);
+    cJSON_AddBoolToObject(features, "wake_word", false);
+    cJSON_AddBoolToObject(features, "echo_cancellation", false);
+    cJSON_AddBoolToObject(features, "websocket", false);
+    cJSON_AddBoolToObject(features, "mqtt", false);
+    cJSON_AddBoolToObject(features, "ota", false);
+    cJSON_AddBoolToObject(features, "multi_device", false);
     cJSON_AddItemToObject(root, "features", features);
 
     uint8_t mac[6] = {0};

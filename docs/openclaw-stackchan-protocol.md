@@ -48,7 +48,14 @@ Important fields:
     "motion": false,
     "servo": false,
     "audio_in": false,
-    "audio_out": false
+    "audio_out": false,
+    "audio_stream_out": false,
+    "wake_word": false,
+    "echo_cancellation": false,
+    "websocket": false,
+    "mqtt": false,
+    "ota": false,
+    "multi_device": false
   },
   "audio_params": null
 }
