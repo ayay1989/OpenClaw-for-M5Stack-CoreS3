@@ -39,6 +39,17 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 {"action":"led_effect","effect":"breath","r":0,"g":200,"b":255,"speed":3}
 ```
 
+## MCP-Compatible Calls
+
+The firmware also accepts a lightweight JSON-RPC payload wrapped as `type=mcp`.
+
+```json
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"initialize","id":1}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/list","id":2}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.emotion.set","arguments":{"value":"love"}},"id":3}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.led.breath","arguments":{"r":0,"g":200,"b":255,"speed":3}},"id":4}}
+```
+
 Supported face names: `happy`, `normal`, `sad`, `angry`, `surprised`, `sleepy`, `shy`, `love`.
 The aliases `neutral`, `loving`, `kissy`, `embarrassed`, and `shocked` are also accepted.
 
