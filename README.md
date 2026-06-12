@@ -26,8 +26,9 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 - WiFi: configured by `CONFIG_OPENCLAW_WIFI_SSID` and `CONFIG_OPENCLAW_WIFI_PASSWORD`
 - TCP server: configured by `CONFIG_OPENCLAW_TCP_HOST` and `CONFIG_OPENCLAW_TCP_PORT`
 - Serial/TCP protocol: one JSON object per line, separated by `\n`
-- Boot state: `happy` emotion + blue breathing LED
+- Boot state: fullscreen Stackchan-style `happy` face + blue breathing LED
 - Heartbeat: every 10 seconds
+- Touch gestures: `tap`, `double_tap`, `long_press`, `swipe_left`, `swipe_right`, `swipe_up`, `swipe_down`
 
 ## Quick Serial Tests
 
@@ -37,6 +38,9 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 {"action":"led","r":255,"g":100,"b":50}
 {"action":"led_effect","effect":"breath","r":0,"g":200,"b":255,"speed":3}
 ```
+
+Supported face names: `happy`, `normal`, `sad`, `angry`, `surprised`, `sleepy`, `shy`, `love`.
+The aliases `neutral`, `loving`, `kissy`, `embarrassed`, and `shocked` are also accepted.
 
 ## Hardware Notes
 

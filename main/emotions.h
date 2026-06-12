@@ -8,16 +8,14 @@
 
 #include <stdint.h>
 #include <stddef.h>
-
-#define EMOTION_BITMAP_WIDTH 16
-#define EMOTION_BITMAP_HEIGHT 16
+#include <stdbool.h>
 
 typedef struct {
     const char *name;
-    const uint16_t *pixels;
 } emotion_bitmap_t;
 
 extern const emotion_bitmap_t g_emotions[];
 extern const size_t g_emotion_count;
 
 const emotion_bitmap_t *emotion_find(const char *name);
+bool emotion_draw(const char *name);

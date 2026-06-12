@@ -177,3 +177,26 @@ void lcd_draw_rgb565_scaled_center(const uint16_t *pixels, int src_w, int src_h,
     }
     heap_caps_free(line);
 }
+
+void lcd_draw_rgb565_lines(lcd_line_renderer_t renderer, void *ctx)
+{
+    if (renderer == NULL) {
+        return;
+    }
+
+    uint16_t *line = heap_caps_malloc(LCD_WIDTH * sizeof(uint16_t), MALLOC_CAP_DMA);
+    if (line == NULL) {
+        ESP_LOGE(TAG, "no DMA memory for generated frame");
+        return;
+    }
+
+    lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
+    for (int y = 0; y < LCD_HEIGHT; ++y) {
+        renderer(y, line, LCD_WIDTH, ctx);
+        for (int x = 0; x < LCD_WIDTH; ++x) {
+            line[x] = __builtin_bswap16(line[x]);
+        }
+        lcd_data(line, LCD_WIDTH * sizeof(uint16_t));
+    }
+    heap_caps_free(line);
+}

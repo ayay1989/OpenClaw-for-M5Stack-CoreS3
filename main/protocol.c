@@ -88,10 +88,9 @@ void protocol_handle_line(const char *line, const char *source)
             send_error(action, "missing value");
         } else {
             const emotion_bitmap_t *emotion = emotion_find(value_json->valuestring);
-            if (emotion == NULL) {
+            if (emotion == NULL || !emotion_draw(value_json->valuestring)) {
                 send_error(action, "unknown emotion");
             } else {
-                lcd_draw_rgb565_scaled_center(emotion->pixels, EMOTION_BITMAP_WIDTH, EMOTION_BITMAP_HEIGHT, 0x0012);
                 send_ok(action, emotion->name);
             }
         }
@@ -146,6 +145,19 @@ void protocol_emit_touch(int x, int y)
     cJSON_AddStringToObject(root, "event", "touch");
     cJSON_AddNumberToObject(root, "x", x);
     cJSON_AddNumberToObject(root, "y", y);
+    send_json(root);
+    cJSON_Delete(root);
+}
+
+void protocol_emit_gesture(const char *gesture, int x, int y)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event", "gesture");
+    cJSON_AddStringToObject(root, "gesture", gesture);
+    if (x >= 0 && y >= 0) {
+        cJSON_AddNumberToObject(root, "x", x);
+        cJSON_AddNumberToObject(root, "y", y);
+    }
     send_json(root);
     cJSON_Delete(root);
 }

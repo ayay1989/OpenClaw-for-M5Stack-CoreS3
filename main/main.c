@@ -335,28 +335,78 @@ static void touch_task(void *arg)
     }
     ESP_LOGI(TAG, "FT6336 touch initialized, chip_id=0x%02X", chip_id);
 
+    const int64_t short_touch_ms = 500;
+    const int64_t long_press_ms = 1500;
+    const int64_t double_tap_ms = 500;
+    const int swipe_threshold_px = 20;
+    const int tap_max_move_px = 8;
+
     bool was_touched = false;
+    bool long_press_sent = false;
+    bool pending_tap = false;
+    int start_x = -1;
+    int start_y = -1;
     int last_x = -1;
     int last_y = -1;
-    int64_t last_emit_ms = 0;
+    int64_t start_ms = 0;
+    int64_t pending_tap_ms = 0;
     while (true) {
         uint8_t data[6] = {0};
+        int64_t now_ms = esp_timer_get_time() / 1000;
+
+        if (pending_tap && now_ms - pending_tap_ms > double_tap_ms) {
+            pending_tap = false;
+            protocol_emit_gesture("tap", last_x, last_y);
+        }
+
         if (i2c_read_regs(FT6336_I2C_ADDR, 0x02, data, sizeof(data)) == ESP_OK) {
             int points = data[0] & 0x0F;
             if (points > 0) {
                 int x = ((data[1] & 0x0F) << 8) | data[2];
                 int y = ((data[3] & 0x0F) << 8) | data[4];
-                int64_t now_ms = esp_timer_get_time() / 1000;
-                if (!was_touched || now_ms - last_emit_ms > 250 ||
-                    abs(x - last_x) > 12 || abs(y - last_y) > 12) {
+                if (!was_touched) {
+                    was_touched = true;
+                    long_press_sent = false;
+                    start_x = x;
+                    start_y = y;
+                    start_ms = now_ms;
                     protocol_emit_touch(x, y);
-                    last_emit_ms = now_ms;
-                    last_x = x;
-                    last_y = y;
+                } else if (!long_press_sent && now_ms - start_ms >= long_press_ms &&
+                           abs(x - start_x) + abs(y - start_y) <= tap_max_move_px) {
+                    long_press_sent = true;
+                    pending_tap = false;
+                    protocol_emit_gesture("long_press", x, y);
                 }
-                was_touched = true;
+                last_x = x;
+                last_y = y;
             } else {
-                was_touched = false;
+                if (was_touched) {
+                    int duration_ms = (int)(now_ms - start_ms);
+                    int dx = last_x - start_x;
+                    int dy = last_y - start_y;
+                    int abs_dx = abs(dx);
+                    int abs_dy = abs(dy);
+
+                    if (!long_press_sent) {
+                        if (duration_ms < short_touch_ms && (abs_dx >= swipe_threshold_px || abs_dy >= swipe_threshold_px)) {
+                            if (abs_dx > abs_dy) {
+                                protocol_emit_gesture(dx < 0 ? "swipe_left" : "swipe_right", -1, -1);
+                            } else {
+                                protocol_emit_gesture(dy < 0 ? "swipe_up" : "swipe_down", -1, -1);
+                            }
+                            pending_tap = false;
+                        } else if (duration_ms < short_touch_ms && abs_dx + abs_dy <= tap_max_move_px) {
+                            if (pending_tap && now_ms - pending_tap_ms <= double_tap_ms) {
+                                pending_tap = false;
+                                protocol_emit_gesture("double_tap", last_x, last_y);
+                            } else {
+                                pending_tap = true;
+                                pending_tap_ms = now_ms;
+                            }
+                        }
+                    }
+                    was_touched = false;
+                }
             }
         }
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -381,10 +431,7 @@ void app_main(void)
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK(button_init());
 
-    const emotion_bitmap_t *happy = emotion_find("happy");
-    if (happy != NULL) {
-        lcd_draw_rgb565_scaled_center(happy->pixels, EMOTION_BITMAP_WIDTH, EMOTION_BITMAP_HEIGHT, 0x0012);
-    }
+    emotion_draw("happy");
     led_set_breath(0, 100, 255, 3);
 
     ESP_ERROR_CHECK(wifi_init());

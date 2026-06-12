@@ -25,3 +25,6 @@
 esp_err_t lcd_init(void);
 void lcd_fill_screen(uint16_t color);
 void lcd_draw_rgb565_scaled_center(const uint16_t *pixels, int src_w, int src_h, uint16_t bg_color);
+
+typedef void (*lcd_line_renderer_t)(int y, uint16_t *line, int width, void *ctx);
+void lcd_draw_rgb565_lines(lcd_line_renderer_t renderer, void *ctx);
