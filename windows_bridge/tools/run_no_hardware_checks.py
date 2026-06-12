@@ -36,6 +36,7 @@ def main() -> int:
             "windows_bridge/openclaw_bridge/face_tracking.py",
             "windows_bridge/openclaw_bridge/resident_loop.py",
             "windows_bridge/openclaw_bridge/memory_context.py",
+            "windows_bridge/openclaw_bridge/mqtt_bus.py",
             "windows_bridge/openclaw_bridge/ota.py",
             "windows_bridge/openclaw_bridge/runtime.py",
             "windows_bridge/openclaw_bridge/speech.py",

@@ -340,6 +340,39 @@ Bridge 会把 CoreS3 上报的 `hello`、`heartbeat`、`body_input`、`pressure`
 
 如果 `--ws-host` 使用 `0.0.0.0`，必须设置 `--control-token` 或 `OPENCLAW_BRIDGE_TOKEN`，避免家庭网络内裸露控制接口。
 
+## MQTT 家庭事件总线
+
+Bridge 也可以连接家庭 MQTT broker，把 CoreS3 身体事件发布到 broker，并从命令 topic 接收控制命令：
+
+```powershell
+set OPENCLAW_MQTT_HOST=192.168.1.20
+set OPENCLAW_MQTT_TOPIC_PREFIX=openclaw/home
+python windows_bridge\openclaw_stackchan_bridge.py --host 0.0.0.0 --port 8765 --mqtt-host %OPENCLAW_MQTT_HOST%
+```
+
+默认 topic：
+
+```text
+发布事件: openclaw/home/events
+订阅命令: openclaw/home/devices/+/command
+```
+
+命令 payload 仍然使用同一套 JSON：
+
+```json
+{"action":"emotion","value":"love"}
+{"action":"presence","state":"listening","emotion":"normal"}
+{"device_command":{"action":"motion","gesture":"nod"}}
+```
+
+可选环境变量：
+
+- `OPENCLAW_MQTT_PORT`
+- `OPENCLAW_MQTT_CLIENT_ID`
+- `OPENCLAW_MQTT_TOPIC_PREFIX`
+- `OPENCLAW_MQTT_USERNAME`
+- `OPENCLAW_MQTT_PASSWORD`
+
 ## 后续接 OpenClaw
 
 建议下一步在这个 Bridge 中增加：
@@ -353,7 +386,6 @@ Bridge 会把 CoreS3 上报的 `hello`、`heartbeat`、`body_input`、`pressure`
 后续增强路线：
 
 - TTS PCM 流式播放到 CoreS3 speaker。
-- MQTT 事件总线。
 - 唤醒词、VAD、打断和回声消除。
 - 可选设备端/外接麦克风。
 - OTA 和多设备联动。

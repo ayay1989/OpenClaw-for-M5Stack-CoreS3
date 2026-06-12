@@ -10,6 +10,7 @@ from .events import BodyIntent, intent_from_event, intents_from_events, stronges
 from .face_tracking import FaceObservation, FaceTracker, LookTarget, parse_observation
 from .lifecycle import LifeCycleManager, LifeState, LifeStatus, ProactiveAction, summarize_intents
 from .memory_context import MemoryContext, load_memory_context
+from .mqtt_bus import MqttBusClient, MqttConfig, mqtt_connect_packet, mqtt_parse_publish, mqtt_subscribe_packet
 from .ota import OtaPackage, OtaPlan
 from .resident_loop import BrainReply, DemoBrainAdapter, HttpBrainAdapter, ResidentConversationLoop, SystemTts
 from .speech import SpeechCue, build_speech_cue, estimate_speech_duration_s
@@ -42,6 +43,8 @@ __all__ = [
     "MemoryContext",
     "MemoryTransport",
     "MessageTransport",
+    "MqttBusClient",
+    "MqttConfig",
     "OpenCvFaceDetector",
     "OtaPackage",
     "OtaPlan",
@@ -65,7 +68,10 @@ __all__ = [
     "make_microphone_stream",
     "make_tts_stream",
     "mqtt_endpoint",
+    "mqtt_connect_packet",
+    "mqtt_parse_publish",
     "mqtt_publish_packet",
+    "mqtt_subscribe_packet",
     "observation_from_face_box",
     "parse_observation",
     "strongest_intent",

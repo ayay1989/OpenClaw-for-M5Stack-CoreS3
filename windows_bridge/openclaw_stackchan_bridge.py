@@ -27,6 +27,8 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from openclaw_bridge.mqtt_bus import MqttBusClient, MqttConfig
+
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8765
@@ -86,6 +88,7 @@ class StackChanBridge:
         control_token: str | None = None,
         ws_host: str | None = None,
         ws_port: int = DEFAULT_WS_PORT,
+        mqtt_config: MqttConfig | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -96,6 +99,7 @@ class StackChanBridge:
         self.control_token = control_token
         self.ws_host = ws_host
         self.ws_port = ws_port
+        self.mqtt_config = mqtt_config
 
         self.state = DeviceState()
         self._events: deque[BridgeEvent] = deque(maxlen=MAX_EVENTS)
@@ -111,6 +115,7 @@ class StackChanBridge:
         self._ws_server: socket.socket | None = None
         self._ws_clients: set[socket.socket] = set()
         self._ws_lock = threading.Lock()
+        self._mqtt_client: MqttBusClient | None = None
         self._last_auto_reaction: dict[str, float] = {}
 
     def start(self) -> bool:
@@ -132,6 +137,7 @@ class StackChanBridge:
             server.close()
             self._stop_control_server()
             return False
+        self._start_mqtt_client()
 
         threading.Thread(target=self._server_loop, args=(server,), name="tcp-server", daemon=True).start()
         threading.Thread(target=self._stdin_loop, name="stdin", daemon=True).start()
@@ -139,6 +145,8 @@ class StackChanBridge:
         print(f"[bridge] local control API on http://{self.control_host}:{self.control_port}")
         if self.ws_host:
             print(f"[bridge] WebSocket API on ws://{self.ws_host}:{self.ws_port}/bridge")
+        if self.mqtt_config:
+            print(f"[bridge] MQTT bus {self.mqtt_config.host}:{self.mqtt_config.port} topic_prefix={self.mqtt_config.topic_prefix}")
         print("[bridge] commands: /help, /status, /emotion happy, /presence listening, /look 0 30, /motion nod, /quit")
         try:
             while not self._stop.is_set():
@@ -149,6 +157,7 @@ class StackChanBridge:
         self._close_client()
         self._stop_control_server()
         self._stop_ws_server()
+        self._stop_mqtt_client()
         return True
 
     def stop(self) -> None:
@@ -156,6 +165,7 @@ class StackChanBridge:
         self._close_client()
         self._stop_control_server()
         self._stop_ws_server()
+        self._stop_mqtt_client()
 
     def send_command(self, payload: dict[str, Any]) -> bool:
         with self._client_lock:
@@ -357,6 +367,29 @@ class StackChanBridge:
                 client.close()
             except OSError:
                 pass
+
+    def _start_mqtt_client(self) -> None:
+        if self.mqtt_config is None:
+            return
+        self._mqtt_client = MqttBusClient(self.mqtt_config, self._handle_mqtt_message)
+        self._mqtt_client.start()
+
+    def _stop_mqtt_client(self) -> None:
+        if self._mqtt_client is not None:
+            self._mqtt_client.stop()
+            self._mqtt_client = None
+
+    def _handle_mqtt_message(self, topic: str, message: dict[str, Any]) -> None:
+        result = self.handle_control_command(message)
+        if not result.get("ok"):
+            print(f"[mqtt] rejected command on {topic}: {result.get('error')}")
+
+    def _publish_mqtt_event(self, event: BridgeEvent) -> None:
+        if self._mqtt_client is None or self.mqtt_config is None:
+            return
+        payload = {"type": "event", "event": self._redact_event(event).to_public_dict()}
+        if not self._mqtt_client.publish_json(self.mqtt_config.event_topic, payload):
+            print("[mqtt] event publish skipped; broker not connected")
 
     def _ws_server_loop(self, server: socket.socket) -> None:
         while not self._stop.is_set():
@@ -686,6 +719,7 @@ class StackChanBridge:
         with self._events_lock:
             self._events.append(event)
         self._broadcast_ws_event(event)
+        self._publish_mqtt_event(event)
         if self.event_log:
             try:
                 with open(self.event_log, "a", encoding="utf-8") as fh:
@@ -906,6 +940,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--control-port", default=DEFAULT_CONTROL_PORT, type=int, help="local API port, default 8766")
     parser.add_argument("--ws-host", default=None, help="optional WebSocket API host, for example 0.0.0.0")
     parser.add_argument("--ws-port", default=DEFAULT_WS_PORT, type=int, help="WebSocket API port, default 8767")
+    parser.add_argument("--mqtt-host", default=os.environ.get("OPENCLAW_MQTT_HOST"), help="optional MQTT broker host")
+    parser.add_argument("--mqtt-port", default=int(os.environ.get("OPENCLAW_MQTT_PORT", "1883")), type=int, help="MQTT broker port, default 1883")
+    parser.add_argument("--mqtt-topic-prefix", default=os.environ.get("OPENCLAW_MQTT_TOPIC_PREFIX", "openclaw/home"), help="MQTT topic prefix")
+    parser.add_argument("--mqtt-client-id", default=os.environ.get("OPENCLAW_MQTT_CLIENT_ID", "openclaw-stackchan-bridge"), help="MQTT client id")
+    parser.add_argument("--mqtt-username", default=os.environ.get("OPENCLAW_MQTT_USERNAME"), help="optional MQTT username")
+    parser.add_argument("--mqtt-password", default=os.environ.get("OPENCLAW_MQTT_PASSWORD"), help="optional MQTT password")
     parser.add_argument("--event-log", default=None, help="optional JSONL event log path")
     parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
@@ -914,6 +954,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    mqtt_config = None
+    if args.mqtt_host:
+        mqtt_config = MqttConfig(
+            host=args.mqtt_host,
+            port=args.mqtt_port,
+            client_id=args.mqtt_client_id,
+            topic_prefix=args.mqtt_topic_prefix,
+            username=args.mqtt_username,
+            password=args.mqtt_password,
+        )
     bridge = StackChanBridge(
         host=args.host,
         port=args.port,
@@ -924,6 +974,7 @@ def main() -> int:
         control_token=args.control_token,
         ws_host=args.ws_host,
         ws_port=args.ws_port,
+        mqtt_config=mqtt_config,
     )
     return 0 if bridge.start() else 1
 
