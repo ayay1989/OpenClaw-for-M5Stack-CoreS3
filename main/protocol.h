@@ -13,6 +13,7 @@ typedef void (*protocol_send_fn_t)(const char *line, void *ctx);
 
 void protocol_init(protocol_send_fn_t sender, void *sender_ctx);
 void protocol_handle_line(const char *line, const char *source);
+esp_err_t protocol_start_self_test(void);
 void protocol_set_tactile_available(bool available);
 void protocol_emit_hello(void);
 void protocol_emit_button(const char *pin, const char *action);

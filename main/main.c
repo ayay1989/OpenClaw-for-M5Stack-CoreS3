@@ -395,6 +395,15 @@ static void heartbeat_task(void *arg)
     }
 }
 
+static void startup_self_test_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(2500));
+    ESP_LOGI(TAG, "running startup body self-test");
+    ESP_ERROR_CHECK_WITHOUT_ABORT(protocol_start_self_test());
+    vTaskDelete(NULL);
+}
+
 static void touch_task(void *arg)
 {
     (void)arg;
@@ -540,5 +549,6 @@ void app_main(void)
     xTaskCreate(tcp_task, "tcp_task", 6144, NULL, 7, NULL);
     xTaskCreate(heartbeat_task, "heartbeat_task", 3072, NULL, 5, NULL);
     xTaskCreate(touch_task, "touch_task", 3072, NULL, 5, NULL);
+    xTaskCreate(startup_self_test_task, "startup_self_test", 3072, NULL, 4, NULL);
     ESP_LOGI(TAG, "OpenClaw Stackchan CoreS3 firmware started");
 }

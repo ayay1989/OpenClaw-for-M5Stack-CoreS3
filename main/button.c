@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_log.h"
@@ -40,6 +41,9 @@ static void button_task(void *arg)
                 if (s_buttons[i].stable_ms >= debounce_ms) {
                     s_buttons[i].last_pressed = pressed_now;
                     s_buttons[i].stable_ms = 0;
+                    if (pressed_now && strcmp(s_buttons[i].name, "A") == 0) {
+                        ESP_ERROR_CHECK_WITHOUT_ABORT(protocol_start_self_test());
+                    }
                     protocol_emit_button(s_buttons[i].name, pressed_now ? "press" : "release");
                 }
             } else {

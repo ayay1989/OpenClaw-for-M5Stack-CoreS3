@@ -322,7 +322,7 @@ static void self_test_task(void *arg)
     vTaskDelete(NULL);
 }
 
-static esp_err_t start_self_test(void)
+esp_err_t protocol_start_self_test(void)
 {
     if (s_self_test_running) {
         return ESP_ERR_INVALID_STATE;
@@ -971,7 +971,7 @@ void protocol_handle_line(const char *line, const char *source)
             send_ok(action, emotion);
         }
     } else if (strcmp(action, "self_test") == 0) {
-        esp_err_t err = start_self_test();
+        esp_err_t err = protocol_start_self_test();
         if (err == ESP_OK) {
             send_ok(action, "started");
         } else if (err == ESP_ERR_INVALID_STATE) {
