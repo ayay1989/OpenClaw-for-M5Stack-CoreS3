@@ -5,10 +5,12 @@
 #include <string.h>
 #include "cJSON.h"
 #include "driver/gpio.h"
+#include "esp_err.h"
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
+#include "body_service.h"
 #include "emotions.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -18,7 +20,7 @@
 #include "presence.h"
 
 static const char *TAG = "protocol";
-static const char *FIRMWARE_VERSION = "0.4.0";
+static const char *FIRMWARE_VERSION = "0.5.0";
 static protocol_send_fn_t s_sender;
 static void *s_sender_ctx;
 
@@ -75,6 +77,23 @@ static bool json_rgb_args_valid(int r, int g, int b)
     return r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255;
 }
 
+static const char *motion_error_message(esp_err_t err)
+{
+    if (err == ESP_ERR_NOT_FOUND) {
+        return "motion unavailable";
+    }
+    if (err == ESP_ERR_TIMEOUT) {
+        return "motion busy";
+    }
+    if (err == ESP_ERR_INVALID_ARG) {
+        return "invalid motion";
+    }
+    if (err == ESP_ERR_INVALID_STATE) {
+        return "motion not initialized";
+    }
+    return esp_err_to_name(err);
+}
+
 static void copy_small(char *dst, size_t dst_len, const char *src)
 {
     if (dst == NULL || dst_len == 0) {
@@ -98,6 +117,7 @@ static void apply_presence_visuals_now(presence_state_t state, const char *emoti
     presence_default_led(state, &r, &g, &b, &speed);
     emotion_draw_presence(draw_emotion, mouth_open || state == PRESENCE_SPEAKING, 0, 0);
     led_set_breath(r, g, b, speed);
+    body_apply_presence(state);
 }
 
 static void visual_task(void *arg)
@@ -307,6 +327,32 @@ static cJSON *mcp_schema_presence_set(void)
     return schema;
 }
 
+static cJSON *mcp_schema_motion_look_at(void)
+{
+    cJSON *schema = mcp_tool_schema_object();
+    cJSON *props = cJSON_GetObjectItem(schema, "properties");
+    cJSON *yaw = cJSON_CreateObject();
+    cJSON_AddStringToObject(yaw, "type", "integer");
+    cJSON_AddNumberToObject(yaw, "minimum", -45);
+    cJSON_AddNumberToObject(yaw, "maximum", 45);
+    cJSON_AddItemToObject(props, "yaw", yaw);
+    cJSON *pitch = cJSON_CreateObject();
+    cJSON_AddStringToObject(pitch, "type", "integer");
+    cJSON_AddNumberToObject(pitch, "minimum", 5);
+    cJSON_AddNumberToObject(pitch, "maximum", 60);
+    cJSON_AddItemToObject(props, "pitch", pitch);
+    cJSON *duration = cJSON_CreateObject();
+    cJSON_AddStringToObject(duration, "type", "integer");
+    cJSON_AddNumberToObject(duration, "minimum", 50);
+    cJSON_AddNumberToObject(duration, "maximum", 3000);
+    cJSON_AddItemToObject(props, "duration_ms", duration);
+    cJSON *required = cJSON_CreateArray();
+    cJSON_AddItemToArray(required, cJSON_CreateString("yaw"));
+    cJSON_AddItemToArray(required, cJSON_CreateString("pitch"));
+    cJSON_AddItemToObject(schema, "required", required);
+    return schema;
+}
+
 static void mcp_handle_initialize(cJSON *id)
 {
     cJSON *result = cJSON_CreateObject();
@@ -342,6 +388,13 @@ static void mcp_handle_tools_list(cJSON *id)
     mcp_add_tool(tools, "self.presence.set", "Set the OpenClaw resident presence state.", mcp_schema_presence_set());
     mcp_add_tool(tools, "self.led.set_color", "Set the external SK6812/NeoPixel color.", mcp_schema_rgb(false));
     mcp_add_tool(tools, "self.led.breath", "Set the external SK6812/NeoPixel breathing effect.", mcp_schema_rgb(true));
+    if (body_motion_available()) {
+        mcp_add_tool(tools, "self.motion.look_at", "Move Stackchan head to yaw/pitch angles.", mcp_schema_motion_look_at());
+        mcp_add_tool(tools, "self.motion.center", "Move Stackchan head to the safe center position.", mcp_tool_schema_object());
+        mcp_add_tool(tools, "self.motion.nod", "Run a short nod gesture.", mcp_tool_schema_object());
+        mcp_add_tool(tools, "self.motion.shake", "Run a short shake gesture.", mcp_tool_schema_object());
+        mcp_add_tool(tools, "self.motion.tilt", "Run a short tilt gesture.", mcp_tool_schema_object());
+    }
     cJSON_AddItemToObject(result, "tools", tools);
     cJSON_AddStringToObject(result, "nextCursor", "");
     mcp_send_result(id, result);
@@ -370,13 +423,14 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         }
         presence_snapshot_t snapshot;
         presence_get_snapshot(&snapshot);
-        char status[192];
+        char status[224];
         snprintf(status, sizeof(status),
-                 "{\"uptime\":%lld,\"wifi_rssi\":%d,\"presence_state\":\"%s\",\"connection_state\":\"%s\",\"emotion\":\"%s\"}",
+                 "{\"uptime\":%lld,\"wifi_rssi\":%d,\"presence_state\":\"%s\",\"connection_state\":\"%s\",\"emotion\":\"%s\",\"motion_available\":%s}",
                  esp_timer_get_time() / 1000000LL, rssi,
                  presence_state_to_string(snapshot.presence),
                  presence_connection_to_string(snapshot.connection),
-                 snapshot.emotion);
+                 snapshot.emotion,
+                 body_motion_available() ? "true" : "false");
         mcp_send_result(id, mcp_tool_text_result(status));
     } else if (strcmp(name, "self.emotion.set") == 0) {
         cJSON *value_json = cJSON_GetObjectItem(args, "value");
@@ -428,6 +482,30 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         } else {
             led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
             mcp_send_result(id, mcp_tool_text_result("ok"));
+        }
+    } else if (strcmp(name, "self.motion.look_at") == 0) {
+        int yaw = json_int_or_default(args, "yaw", 1000);
+        int pitch = json_int_or_default(args, "pitch", 1000);
+        int duration = json_int_or_default(args, "duration_ms", 350);
+        if (yaw < -45 || yaw > 45 || pitch < 5 || pitch > 60 || duration < 50 || duration > 3000) {
+            mcp_send_error(id, -32602, "yaw must be -45..45, pitch 5..60, duration_ms 50..3000");
+        } else {
+            esp_err_t err = body_look_at(yaw, pitch, (uint32_t)duration);
+            if (err == ESP_OK) {
+                mcp_send_result(id, mcp_tool_text_result("queued"));
+            } else {
+                mcp_send_error(id, -32000, motion_error_message(err));
+            }
+        }
+    } else if (strcmp(name, "self.motion.center") == 0 || strcmp(name, "self.motion.nod") == 0 ||
+               strcmp(name, "self.motion.shake") == 0 || strcmp(name, "self.motion.tilt") == 0) {
+        const char *gesture = strrchr(name, '.');
+        gesture = gesture != NULL ? gesture + 1 : "center";
+        esp_err_t err = body_motion_gesture(gesture);
+        if (err == ESP_OK) {
+            mcp_send_result(id, mcp_tool_text_result("queued"));
+        } else {
+            mcp_send_error(id, -32000, motion_error_message(err));
         }
     } else {
         mcp_send_error(id, -32601, "Unknown tool");
@@ -688,6 +766,32 @@ void protocol_handle_line(const char *line, const char *source)
             led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
             send_ok(action, effect_json->valuestring);
         }
+    } else if (strcmp(action, "look") == 0) {
+        int yaw = json_int_or_default(root, "yaw", 1000);
+        int pitch = json_int_or_default(root, "pitch", 1000);
+        int duration = json_int_or_default(root, "duration_ms", 350);
+        if (yaw < -45 || yaw > 45 || pitch < 5 || pitch > 60 || duration < 50 || duration > 3000) {
+            send_error(action, "yaw must be -45..45, pitch 5..60, duration_ms 50..3000");
+        } else {
+            esp_err_t err = body_look_at(yaw, pitch, (uint32_t)duration);
+            if (err == ESP_OK) {
+                send_ok(action, "queued");
+            } else {
+                send_error(action, motion_error_message(err));
+            }
+        }
+    } else if (strcmp(action, "motion") == 0) {
+        cJSON *gesture_json = cJSON_GetObjectItem(root, "gesture");
+        if (!cJSON_IsString(gesture_json)) {
+            send_error(action, "missing gesture");
+        } else {
+            esp_err_t err = body_motion_gesture(gesture_json->valuestring);
+            if (err == ESP_OK) {
+                send_ok(action, gesture_json->valuestring);
+            } else {
+                send_error(action, motion_error_message(err));
+            }
+        }
     } else if (strcmp(action, "ping") == 0) {
         send_ok(action, "pong");
     } else {
@@ -729,7 +833,8 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "gesture", true);
     cJSON_AddBoolToObject(features, "presence", true);
     cJSON_AddBoolToObject(features, "memory_context", true);
-    cJSON_AddBoolToObject(features, "motion", false);
+    cJSON_AddBoolToObject(features, "motion", body_motion_available());
+    cJSON_AddBoolToObject(features, "servo", body_motion_available());
     cJSON_AddBoolToObject(features, "audio_in", false);
     cJSON_AddBoolToObject(features, "audio_out", false);
     cJSON_AddItemToObject(root, "features", features);
@@ -800,6 +905,7 @@ void protocol_emit_gesture(const char *gesture, int x, int y)
 {
     const char *intent = gesture_intent(gesture);
     apply_local_intent(intent);
+    body_apply_touch_gesture(gesture);
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "gesture");
     cJSON_AddStringToObject(root, "gesture", gesture);
@@ -825,6 +931,7 @@ void protocol_emit_heartbeat(void)
     cJSON_AddStringToObject(root, "event", "heartbeat");
     cJSON_AddNumberToObject(root, "uptime", esp_timer_get_time() / 1000000LL);
     cJSON_AddNumberToObject(root, "wifi_rssi", rssi);
+    cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
     presence_add_json(root);
     send_json(root);
     cJSON_Delete(root);

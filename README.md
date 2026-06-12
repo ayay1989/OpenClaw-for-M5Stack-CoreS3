@@ -1,6 +1,6 @@
 # OpenClaw Stackchan CoreS3 Firmware
 
-ESP-IDF v5.x firmware for M5Stack CoreS3 / ESP32-S3. It connects to WiFi, keeps a TCP client connection to OpenClaw, accepts newline-delimited JSON from both serial and TCP, drives the ILI9341 LCD, controls LED outputs, and reports button/touch/heartbeat events.
+ESP-IDF v5.x firmware for M5Stack CoreS3 / ESP32-S3. It connects to WiFi, keeps a TCP client connection to OpenClaw, accepts newline-delimited JSON from both serial and TCP, drives the ILI9341 LCD, controls LED outputs, moves the Stackchan head when servos are present, and reports button/touch/heartbeat events.
 
 This project was checked against the CoreS3 board support in `mo-hantang/Stackchan-HtSz`. The current defaults therefore use the Stackchan-HtSz CoreS3 board pins:
 
@@ -32,6 +32,7 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 - Heartbeat: every 10 seconds
 - Touch gestures: `tap`, `double_tap`, `long_press`, `swipe_left`, `swipe_right`, `swipe_up`, `swipe_down`
 - Presence states: `booting`, `connecting`, `online_idle`, `listening`, `thinking`, `speaking`, `sleeping`, `offline_local`, `error`
+- Motion: optional Stackchan yaw/pitch servos on UART1 GPIO6/GPIO7, auto-disabled when PY32 or servos are not present
 
 ## Quick Serial Tests
 
@@ -45,9 +46,15 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 {"action":"memory_cue","emotion":"love","ttl_ms":3000}
 {"action":"presence","state":"speaking","emotion":"happy","mouth":true}
 {"action":"sleep","enabled":true}
+{"action":"look","yaw":10,"pitch":30,"duration_ms":400}
+{"action":"motion","gesture":"center"}
+{"action":"motion","gesture":"nod"}
+{"action":"motion","gesture":"shake"}
+{"action":"motion","gesture":"tilt"}
 ```
 
 `presence` is the lightweight OpenClaw resident state layer. It changes the face and LED mood while keeping the older `emotion`, `led`, and `led_effect` commands compatible.
+`look` and `motion` are v0.5 body commands. If the servo hardware is not detected, the firmware keeps running and replies with `motion unavailable`.
 
 The firmware also accepts a short-lived context envelope:
 
@@ -68,6 +75,8 @@ The main protocol is still newline-delimited JSON. The firmware also accepts a l
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.emotion.set","arguments":{"value":"love"}},"id":3}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.led.breath","arguments":{"r":0,"g":200,"b":255,"speed":3}},"id":4}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.presence.set","arguments":{"state":"speaking","emotion":"happy"}},"id":5}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.motion.look_at","arguments":{"yaw":-15,"pitch":32,"duration_ms":350}},"id":6}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.motion.nod","arguments":{}},"id":7}}
 ```
 
 Supported face names: `happy`, `normal`, `sad`, `angry`, `surprised`, `sleepy`, `shy`, `love`.
@@ -79,6 +88,19 @@ The aliases `neutral`, `loving`, `kissy`, `embarrassed`, and `shocked` are also 
 - AW9523 is initialized early and used to reset the LCD panel and AW88298 amp.
 - IP5306 `0x75` is only probed as a fallback note; normal CoreS3 hardware uses AXP2101 instead.
 - GPIO45 is the known-good external NeoPixel/SK6812 output inherited from the flashed baseline.
-- A Stackchan-style PY32 LED ring is optionally probed on internal I2C address `0x6F`; if it is missing, GPIO45 LED output still works.
+- A Stackchan-style PY32 helper MCU is optionally probed on internal I2C address `0x6F`; it drives the RGB ring and enables servo VM_EN power. If it is missing, GPIO45 LED output still works and motion is disabled.
+- Stackchan yaw/pitch servos use UART1 at 1 Mbps: TX GPIO6, RX GPIO7, yaw servo ID `1`, pitch servo ID `2`. Safe ranges are yaw `-45..45` and pitch `5..60`, with center at `0,30`.
 - Button C uses GPIO0, the ESP32-S3 boot pin, so firmware handles it as a debounced active-low input only after boot.
 - AW88298 speaker audio is not enabled yet, but the shared internal I2C bus and AW9523 reset path are initialized.
+
+## v0.5 Motion Validation
+
+1. Boot and confirm the device still shows the `happy` face and blue breathing LED.
+2. Confirm serial logs show PY32 and servo availability. Missing servos should be a warning, not a reboot.
+3. Send `{"action":"ping"}` and the earlier emotion/LED/presence commands to confirm old JSON still works.
+4. With PY32 and servos connected, send `{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/list","id":2}}` and confirm `self.motion.*` tools are listed.
+5. With servos connected, test `center`, `nod`, `shake`, `tilt`, and one `look` command.
+6. Without PY32 or servos connected, `hello.features.motion` should be `false`; legacy motion commands should return an error such as `motion unavailable` while screen, LED, touch, WiFi, TCP, and heartbeat continue.
+7. Touch validation: double tap should summon/listen and nod when motion is available; long press should sleep/wake and lower the head; left/right swipes should lightly look left/right.
+
+v0.5 intentionally does not add audio, microphone, WebSocket, camera, IMU, OTA, or device-side long-term memory storage.

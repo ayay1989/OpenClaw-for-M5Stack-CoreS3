@@ -23,11 +23,15 @@
 #include "nvs_flash.h"
 
 #include "button.h"
+#include "body_service.h"
 #include "emotions.h"
+#include "i2c_bus.h"
 #include "lcddriver.h"
 #include "leddriver.h"
 #include "presence.h"
 #include "protocol.h"
+#include "py32driver.h"
+#include "servodriver.h"
 
 #define WIFI_SSID CONFIG_OPENCLAW_WIFI_SSID
 #define WIFI_PASSWORD CONFIG_OPENCLAW_WIFI_PASSWORD
@@ -80,17 +84,17 @@ static bool socket_is_active(void)
 static esp_err_t i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t value)
 {
     uint8_t buffer[2] = {reg, value};
-    return i2c_master_write_to_device(CORES3_INTERNAL_I2C_PORT, addr, buffer, sizeof(buffer), pdMS_TO_TICKS(100));
+    return cores3_i2c_write_to_device(CORES3_INTERNAL_I2C_PORT, addr, buffer, sizeof(buffer), pdMS_TO_TICKS(100));
 }
 
 static esp_err_t i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t *value)
 {
-    return i2c_master_write_read_device(CORES3_INTERNAL_I2C_PORT, addr, &reg, 1, value, 1, pdMS_TO_TICKS(100));
+    return cores3_i2c_write_read_device(CORES3_INTERNAL_I2C_PORT, addr, &reg, 1, value, 1, pdMS_TO_TICKS(100));
 }
 
 static esp_err_t i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buffer, size_t len)
 {
-    return i2c_master_write_read_device(CORES3_INTERNAL_I2C_PORT, addr, &reg, 1, buffer, len, pdMS_TO_TICKS(100));
+    return cores3_i2c_write_read_device(CORES3_INTERNAL_I2C_PORT, addr, &reg, 1, buffer, len, pdMS_TO_TICKS(100));
 }
 
 static void protocol_sender(const char *line, void *ctx)
@@ -477,12 +481,16 @@ void app_main(void)
     ESP_ERROR_CHECK(s_send_lock == NULL ? ESP_ERR_NO_MEM : ESP_OK);
 
     ESP_ERROR_CHECK(presence_init());
+    ESP_ERROR_CHECK(cores3_i2c_bus_lock_init());
     presence_set_state(PRESENCE_BOOTING, "happy");
     presence_set_connection(CONNECTION_OFFLINE);
     protocol_init(protocol_sender, NULL);
     ESP_ERROR_CHECK(i2c_init_internal());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(py32_init(CORES3_INTERNAL_I2C_PORT));
     ESP_ERROR_CHECK(lcd_init());
     ESP_ERROR_CHECK(led_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(servo_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(body_service_init());
     ESP_ERROR_CHECK(button_init());
 
     emotion_draw("happy");

@@ -2,14 +2,13 @@
 
 #include <math.h>
 #include <stdbool.h>
-#include <string.h>
-#include "driver/i2c.h"
 #include "driver/rmt_tx.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "py32driver.h"
 
 static const char *TAG = "led";
 
@@ -21,68 +20,6 @@ static uint8_t s_r;
 static uint8_t s_g;
 static uint8_t s_b;
 static uint8_t s_speed = 3;
-static bool s_py32_available;
-static uint8_t s_py32_failures;
-
-#define CORES3_LED_I2C_PORT I2C_NUM_1
-#define CORES3_PY32_I2C_ADDR 0x6F
-#define CORES3_PY32_LED_COUNT 12
-#define PY32_REG_LED_CFG 0x24
-#define PY32_REG_LED_RAM 0x30
-#define PY32_LED_REFRESH_BIT 0x40
-
-static uint16_t led_rgb888_to_565(uint8_t r, uint8_t g, uint8_t b)
-{
-    return ((uint16_t)(r & 0xF8) << 8) | ((uint16_t)(g & 0xFC) << 3) | (b >> 3);
-}
-
-static esp_err_t py32_write_block(uint8_t reg, const uint8_t *data, size_t len)
-{
-    uint8_t buffer[1 + CORES3_PY32_LED_COUNT * 2];
-    if (data == NULL || len + 1 > sizeof(buffer)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    buffer[0] = reg;
-    memcpy(buffer + 1, data, len);
-    return i2c_master_write_to_device(CORES3_LED_I2C_PORT, CORES3_PY32_I2C_ADDR,
-                                      buffer, len + 1, pdMS_TO_TICKS(100));
-}
-
-static esp_err_t py32_write_led_frame(uint8_t r, uint8_t g, uint8_t b)
-{
-    uint16_t color = led_rgb888_to_565(r, g, b);
-    uint8_t data[CORES3_PY32_LED_COUNT * 2];
-    for (int i = 0; i < CORES3_PY32_LED_COUNT; ++i) {
-        data[i * 2] = (uint8_t)(color & 0xFF);
-        data[i * 2 + 1] = (uint8_t)(color >> 8);
-    }
-
-    esp_err_t err = py32_write_block(PY32_REG_LED_RAM, data, sizeof(data));
-    if (err != ESP_OK) {
-        return err;
-    }
-    uint8_t refresh = CORES3_PY32_LED_COUNT | PY32_LED_REFRESH_BIT;
-    return py32_write_block(PY32_REG_LED_CFG, &refresh, sizeof(refresh));
-}
-
-static void py32_try_init(void)
-{
-    uint8_t count = CORES3_PY32_LED_COUNT;
-    esp_err_t err = py32_write_block(PY32_REG_LED_CFG, &count, sizeof(count));
-    if (err == ESP_OK) {
-        err = py32_write_led_frame(0, 0, 0);
-    }
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "PY32 LED ring not available at 0x%02X: %s",
-                 CORES3_PY32_I2C_ADDR, esp_err_to_name(err));
-        s_py32_available = false;
-        return;
-    }
-
-    s_py32_available = true;
-    s_py32_failures = 0;
-    ESP_LOGI(TAG, "PY32 LED ring initialized at 0x%02X", CORES3_PY32_I2C_ADDR);
-}
 
 static void led_write_raw(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -95,19 +32,8 @@ static void led_write_raw(uint8_t r, uint8_t g, uint8_t b)
         ESP_ERROR_CHECK_WITHOUT_ABORT(rmt_tx_wait_all_done(s_channel, pdMS_TO_TICKS(100)));
     }
 
-    if (s_py32_available) {
-        esp_err_t err = py32_write_led_frame(r, g, b);
-        if (err != ESP_OK) {
-            s_py32_failures++;
-            ESP_LOGW(TAG, "PY32 LED ring write failed (%u/3): %s",
-                     s_py32_failures, esp_err_to_name(err));
-            if (s_py32_failures >= 3) {
-                s_py32_available = false;
-                ESP_LOGW(TAG, "PY32 LED ring disabled after repeated write failures");
-            }
-        } else {
-            s_py32_failures = 0;
-        }
+    if (py32_is_available()) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(py32_write_led_rgb(r, g, b));
     }
 }
 
@@ -199,14 +125,13 @@ esp_err_t led_init(void)
         s_encoder = NULL;
     }
 
-    py32_try_init();
-    if (rmt_err != ESP_OK && !s_py32_available) {
+    if (rmt_err != ESP_OK && !py32_is_available()) {
         return rmt_err;
     }
     led_set_color(0, 0, 0);
     xTaskCreate(led_task, "led_task", 3072, NULL, 5, NULL);
     ESP_LOGI(TAG, "SK6812 LED initialized on GPIO%d; PY32 ring %s",
-             CORES3_LED_GPIO, s_py32_available ? "enabled" : "disabled");
+             CORES3_LED_GPIO, py32_is_available() ? "enabled" : "disabled");
     return ESP_OK;
 }
 
