@@ -339,6 +339,15 @@ python windows_bridge\tools\bridge_diagnostics.py --url http://127.0.0.1:8766 --
 - CoreS3 是否已经 connected。
 - CoreS3 上报的 features，例如 `motion`、`touch`、`audio_stream_out`。
 - 最近 heartbeat 距离现在多久。
+- 最近几行 `windows_bridge\logs\events.ndjson` 事件日志，避免 PowerShell 窗口滚动后看不到 `hello` 和 `heartbeat`。
+
+Bridge 默认会把事件写入：
+
+```text
+windows_bridge\logs\events.ndjson
+```
+
+如果你想改位置，启动 Bridge 时传入 `--event-log <路径>`，或者设置 `OPENCLAW_EVENT_LOG`。
 
 ## WebSocket 家庭 WiFi 通道
 

@@ -36,6 +36,7 @@ DEFAULT_PORT = 8765
 DEFAULT_CONTROL_HOST = "127.0.0.1"
 DEFAULT_CONTROL_PORT = 8766
 DEFAULT_WS_PORT = 8767
+DEFAULT_EVENT_LOG = os.path.join(os.path.dirname(__file__), "logs", "events.ndjson")
 MAX_QUEUED_COMMANDS = 100
 MAX_EVENTS = 300
 MAX_LINE_BUFFER = 65536
@@ -623,6 +624,10 @@ class StackChanBridge:
             self.state.connected = True
             self.state.address = f"{address[0]}:{address[1]}"
         print(f"[bridge] CoreS3 connected from {self.state.address}")
+        self._record_event_kind(
+            "bridge_connection",
+            {"event": "bridge_connection", "action": "connected", "address": self.state.address},
+        )
 
         buffer = ""
         try:
@@ -652,6 +657,10 @@ class StackChanBridge:
                     self._connection_ready = False
                     self.state.connected = False
             print("[bridge] CoreS3 disconnected")
+            self._record_event_kind(
+                "bridge_connection",
+                {"event": "bridge_connection", "action": "disconnected", "address": f"{address[0]}:{address[1]}"},
+            )
 
     def _flush_queued_commands(self, client: socket.socket) -> None:
         while True:
@@ -745,6 +754,9 @@ class StackChanBridge:
 
     def _record_event(self, message: dict[str, Any]) -> None:
         kind = str(message.get("event") or message.get("type") or message.get("status") or "message")
+        self._record_event_kind(kind, message)
+
+    def _record_event_kind(self, kind: str, message: dict[str, Any]) -> None:
         event = BridgeEvent(timestamp=time.time(), kind=kind, message=message)
         with self._events_lock:
             self._events.append(event)
@@ -752,6 +764,7 @@ class StackChanBridge:
         self._publish_mqtt_event(event)
         if self.event_log:
             try:
+                os.makedirs(os.path.dirname(os.path.abspath(self.event_log)), exist_ok=True)
                 with open(self.event_log, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(self._redact_event(event).to_public_dict(), ensure_ascii=False, separators=(",", ":")) + "\n")
             except OSError as exc:
@@ -977,13 +990,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mqtt-username", default=os.environ.get("OPENCLAW_MQTT_USERNAME"), help="optional MQTT username")
     parser.add_argument("--mqtt-password", default=os.environ.get("OPENCLAW_MQTT_PASSWORD"), help="optional MQTT password")
     parser.add_argument("--tts-voice", default=os.environ.get("OPENCLAW_TTS_VOICE", "zh-CN-YunxiNeural"), help="Edge-TTS voice, for example zh-CN-YunxiNeural")
-    parser.add_argument("--event-log", default=None, help="optional JSONL event log path")
+    parser.add_argument("--event-log", default=os.environ.get("OPENCLAW_EVENT_LOG", DEFAULT_EVENT_LOG), help="JSONL event log path")
     parser.add_argument("--control-token", default=os.environ.get("OPENCLAW_BRIDGE_TOKEN"), help="required token when control API is not localhost")
     parser.add_argument("--no-auto-react", action="store_true", help="disable simple built-in body reactions")
     return parser.parse_args()
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(line_buffering=True)
     args = parse_args()
     mqtt_config = None
     if args.mqtt_host:
