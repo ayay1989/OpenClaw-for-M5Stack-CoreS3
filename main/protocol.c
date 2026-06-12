@@ -43,6 +43,7 @@ typedef struct {
 
 static QueueHandle_t s_visual_queue;
 static audio_stream_state_t s_audio_stream;
+static bool s_self_test_running;
 
 static void send_json(cJSON *root)
 {
@@ -277,6 +278,61 @@ static void apply_presence_visuals(presence_state_t state, const char *emotion, 
     };
     copy_small(update.emotion, sizeof(update.emotion), emotion);
     xQueueOverwrite(s_visual_queue, &update);
+}
+
+static void self_test_task(void *arg)
+{
+    (void)arg;
+    ESP_LOGI(TAG, "body self-test started");
+
+    apply_presence_visuals_now(PRESENCE_LISTENING, "surprised", false);
+    led_set_color(255, 0, 0);
+    vTaskDelay(pdMS_TO_TICKS(700));
+
+    apply_presence_visuals_now(PRESENCE_SPEAKING, "love", true);
+    led_set_color(0, 255, 0);
+    vTaskDelay(pdMS_TO_TICKS(700));
+
+    apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
+    led_set_color(0, 0, 255);
+    vTaskDelay(pdMS_TO_TICKS(700));
+
+    esp_err_t motion_err = body_motion_available() ? body_motion_gesture("nod") : ESP_ERR_NOT_FOUND;
+    esp_err_t audio_err = audio_is_available() ? audio_beep(880, 180, 45) : ESP_ERR_NOT_SUPPORTED;
+    led_set_breath(0, 100, 255, 3);
+    presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
+    apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event", "self_test");
+    cJSON_AddBoolToObject(root, "display", true);
+    cJSON_AddBoolToObject(root, "led", true);
+    cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
+    cJSON_AddStringToObject(root, "motion_result", motion_err == ESP_OK ? "ok" : motion_error_message(motion_err));
+    cJSON_AddBoolToObject(root, "audio_out_available", audio_is_available());
+    cJSON_AddStringToObject(root, "audio_result", audio_err == ESP_OK ? "ok" : audio_error_message(audio_err));
+    presence_add_json(root);
+    send_json(root);
+    cJSON_Delete(root);
+
+    ESP_LOGI(TAG, "body self-test finished, motion=%s audio=%s",
+             motion_err == ESP_OK ? "ok" : motion_error_message(motion_err),
+             audio_err == ESP_OK ? "ok" : audio_error_message(audio_err));
+    s_self_test_running = false;
+    vTaskDelete(NULL);
+}
+
+static esp_err_t start_self_test(void)
+{
+    if (s_self_test_running) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    s_self_test_running = true;
+    if (xTaskCreate(self_test_task, "self_test", 4096, NULL, 4, NULL) != pdPASS) {
+        s_self_test_running = false;
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 static const char *gesture_intent(const char *gesture)
@@ -913,6 +969,15 @@ void protocol_handle_line(const char *line, const char *source)
             presence_set_state(PRESENCE_SPEAKING, emotion);
             apply_presence_visuals(PRESENCE_SPEAKING, emotion, true);
             send_ok(action, emotion);
+        }
+    } else if (strcmp(action, "self_test") == 0) {
+        esp_err_t err = start_self_test();
+        if (err == ESP_OK) {
+            send_ok(action, "started");
+        } else if (err == ESP_ERR_INVALID_STATE) {
+            send_error(action, "self test already running");
+        } else {
+            send_error(action, esp_err_to_name(err));
         }
     } else if (strcmp(action, "led") == 0) {
         int r = json_int_or_default(root, "r", 0);

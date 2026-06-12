@@ -109,7 +109,7 @@
       "properties": {
         "event": {
           "type": "string",
-          "enum": ["button", "touch", "pressure", "gesture", "body_input", "heartbeat"]
+          "enum": ["button", "touch", "pressure", "gesture", "body_input", "heartbeat", "self_test"]
         },
         "input": { "type": "string", "enum": ["touch", "gesture", "button", "motion", "sensor", "unknown"] },
         "pin": { "type": "string", "enum": ["A", "B", "C"] },

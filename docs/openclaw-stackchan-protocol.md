@@ -246,6 +246,22 @@ Heartbeat:
 
 Presence fields are included in hello, heartbeat, and input events.
 
+### Hardware Self-Test Event
+
+Bridge or OpenClaw can send:
+
+```json
+{"action":"self_test"}
+```
+
+CoreS3 responds immediately with `{"status":"ok","action":"self_test","value":"started"}` and then runs a short body self-test: face changes, LED red/green/blue sequence, optional motion nod, optional beep. When finished it emits:
+
+```json
+{"event":"self_test","display":true,"led":true,"motion_available":false,"motion_result":"motion unavailable","audio_out_available":false,"audio_result":"audio unavailable"}
+```
+
+Use this event to separate protocol readiness from physical hardware readiness.
+
 ### Heartbeat Field Stability
 
 | Field | Type | Required | Meaning | v1 stable |

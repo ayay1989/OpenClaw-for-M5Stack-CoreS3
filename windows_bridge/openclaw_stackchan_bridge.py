@@ -185,7 +185,7 @@ class StackChanBridge:
             print(f"[bridge] WebSocket API on ws://{self.ws_host}:{self.ws_port}/bridge")
         if self.mqtt_config:
             print(f"[bridge] MQTT bus {self.mqtt_config.host}:{self.mqtt_config.port} topic_prefix={self.mqtt_config.topic_prefix}")
-        print("[bridge] commands: /help, /status, /emotion happy, /presence listening, /look 0 30, /motion nod, /quit")
+        print("[bridge] commands: /help, /status, /selftest, /emotion happy, /presence listening, /look 0 30, /motion nod, /quit")
         try:
             while not self._stop.is_set():
                 time.sleep(0.2)
@@ -978,6 +978,8 @@ class StackChanBridge:
             return payload
         if command == "/ping" and not args:
             return {"action": "ping"}
+        if command == "/selftest" and not args:
+            return {"action": "self_test"}
         raise ValueError("unknown command or wrong arguments; type /help")
 
     def _print_help(self) -> None:
@@ -985,6 +987,7 @@ class StackChanBridge:
         print("  /status")
         print("  /events")
         print("  /ping")
+        print("  /selftest")
         print("  /emotion happy|normal|sad|angry|surprised|sleepy|shy|love")
         print("  /presence online_idle|listening|thinking|speaking|sleeping [emotion]")
         print("  /look <yaw -45..45> <pitch 5..60> [duration_ms]")
@@ -992,6 +995,7 @@ class StackChanBridge:
         print("  /led <r> <g> <b>")
         print("  /breath <r> <g> <b> [speed]")
         print("  /beep [freq] [duration_ms] [volume]")
+        print("  {\"action\":\"self_test\"}")
         print("  {\"action\":\"ping\"}")
         print("  /quit")
 

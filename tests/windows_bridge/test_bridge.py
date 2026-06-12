@@ -44,6 +44,7 @@ class BridgeTest(unittest.TestCase):
             bridge.payload_from_console_line("/beep 880 120 30"),
             {"action": "beep", "freq": 880, "duration_ms": 120, "volume": 30},
         )
+        self.assertEqual(bridge.payload_from_console_line("/selftest"), {"action": "self_test"})
 
     def test_hello_updates_state_and_queues_ack(self) -> None:
         bridge = self.make_bridge(auto_react=False)

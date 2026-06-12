@@ -356,6 +356,14 @@ windows_bridge\logs\events.ndjson
 - 如果日志里 `hello` 后没有 `memory_context`，确认 `windows_bridge\local_memory_context.json` 存在且不是空内容；Bridge 会在 `hello_ack` 后自动下发它。
 - 如果 `presence_state` 长时间停在 `connecting`，说明设备没有收到或处理 `hello_ack`，优先检查 Bridge 发送日志 `[tx] {"type":"hello_ack"...}`。
 
+如果 TCP 已经 ready，但屏幕、灯、头或声音看起来没变化，在 Bridge 窗口输入：
+
+```text
+/selftest
+```
+
+CoreS3 会依次切换表情/嘴型、红绿蓝灯、尝试点头和 beep，并上报 `self_test`。如果表情没变，优先查 LCD 绘制；如果颜色和命令不一致，优先查 LED 色序/PY32 LED 映射；如果 `motion_available=false`，头不会动是舵机链路未初始化；如果 `audio_out_available=false`，TTS 不会从 CoreS3 喇叭播放。
+
 ## WebSocket 家庭 WiFi 通道
 
 Bridge 可以额外启动 WebSocket API，让同一家庭 WiFi 内的 OpenClaw、控制端或调试工具连接到 Windows 电脑：
