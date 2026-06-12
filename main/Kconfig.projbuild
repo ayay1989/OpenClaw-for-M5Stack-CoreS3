@@ -24,4 +24,21 @@ menu "OpenClaw Stackchan"
         default 8765
         range 1 65535
 
+    config OPENCLAW_AUDIO_ENABLE
+        bool "Enable experimental CoreS3 speaker output"
+        default n
+        help
+            Enables experimental I2S0 TX for the CoreS3 AW88298 speaker path.
+            This is off by default and only intended for local speaker
+            validation.
+
+    config OPENCLAW_AUDIO_USE_GPIO0_MCLK
+        bool "Use GPIO0 as audio MCLK and disable Button C"
+        depends on OPENCLAW_AUDIO_ENABLE
+        default n
+        help
+            Stackchan-HtSz routes AW88298 MCLK to GPIO0. GPIO0 is also the
+            ESP32-S3 BOOT pin and this firmware's Button C input, so leave this
+            off unless the speaker path requires MCLK during hardware testing.
+
 endmenu

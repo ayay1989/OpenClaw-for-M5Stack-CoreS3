@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "main.c"
+        "audiodriver.c"
         "lcddriver.c"
         "i2c_bus.c"
         "leddriver.c"

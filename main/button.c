@@ -21,7 +21,9 @@ typedef struct {
 static button_state_t s_buttons[] = {
     {CORES3_BUTTON_A_GPIO, "A", false, 0},
     {CORES3_BUTTON_B_GPIO, "B", false, 0},
+#if !CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK
     {CORES3_BUTTON_C_GPIO, "C", false, 0},
+#endif
 };
 
 static void button_task(void *arg)
@@ -51,8 +53,10 @@ static void button_task(void *arg)
 esp_err_t button_init(void)
 {
     uint64_t mask = (1ULL << CORES3_BUTTON_A_GPIO) |
-                    (1ULL << CORES3_BUTTON_B_GPIO) |
-                    (1ULL << CORES3_BUTTON_C_GPIO);
+                    (1ULL << CORES3_BUTTON_B_GPIO);
+#if !CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK
+    mask |= (1ULL << CORES3_BUTTON_C_GPIO);
+#endif
     gpio_config_t io_conf = {
         .pin_bit_mask = mask,
         .mode = GPIO_MODE_INPUT,
@@ -61,7 +65,14 @@ esp_err_t button_init(void)
         .intr_type = GPIO_INTR_DISABLE,
     };
     ESP_RETURN_ON_ERROR(gpio_config(&io_conf), TAG, "gpio_config failed");
-    ESP_LOGI(TAG, "buttons initialized: A=%d B=%d C=%d(GPIO0/BOOT)", CORES3_BUTTON_A_GPIO, CORES3_BUTTON_B_GPIO, CORES3_BUTTON_C_GPIO);
+    ESP_LOGI(TAG, "buttons initialized: A=%d B=%d C=%s",
+             CORES3_BUTTON_A_GPIO, CORES3_BUTTON_B_GPIO,
+#if CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK
+             "disabled for audio MCLK on GPIO0"
+#else
+             "GPIO0/BOOT"
+#endif
+    );
     xTaskCreate(button_task, "button_task", 3072, NULL, 8, NULL);
     return ESP_OK;
 }

@@ -51,10 +51,12 @@ Set WiFi and OpenClaw TCP settings under `OpenClaw Stackchan` in menuconfig. Do 
 {"action":"motion","gesture":"nod"}
 {"action":"motion","gesture":"shake"}
 {"action":"motion","gesture":"tilt"}
+{"action":"beep","freq":880,"duration_ms":120,"volume":30}
 ```
 
 `presence` is the lightweight OpenClaw resident state layer. It changes the face and LED mood while keeping the older `emotion`, `led`, and `led_effect` commands compatible.
 `look` and `motion` are v0.5 body commands. If the servo hardware is not detected, the firmware keeps running and replies with `motion unavailable`.
+`beep` is the v0.6 experimental speaker command. It returns `audio unavailable` unless `CONFIG_OPENCLAW_AUDIO_ENABLE` is enabled and I2S speaker output initializes.
 
 The firmware also accepts a short-lived context envelope:
 
@@ -77,6 +79,7 @@ The main protocol is still newline-delimited JSON. The firmware also accepts a l
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.presence.set","arguments":{"state":"speaking","emotion":"happy"}},"id":5}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.motion.look_at","arguments":{"yaw":-15,"pitch":32,"duration_ms":350}},"id":6}}
 {"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.motion.nod","arguments":{}},"id":7}}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/call","params":{"name":"self.audio.beep","arguments":{"frequency_hz":880,"duration_ms":120,"volume":30}},"id":8}}
 ```
 
 Supported face names: `happy`, `normal`, `sad`, `angry`, `surprised`, `sleepy`, `shy`, `love`.
@@ -91,7 +94,7 @@ The aliases `neutral`, `loving`, `kissy`, `embarrassed`, and `shocked` are also 
 - A Stackchan-style PY32 helper MCU is optionally probed on internal I2C address `0x6F`; it drives the RGB ring and enables servo VM_EN power. If it is missing, GPIO45 LED output still works and motion is disabled.
 - Stackchan yaw/pitch servos use UART1 at 1 Mbps: TX GPIO6, RX GPIO7, yaw servo ID `1`, pitch servo ID `2`. Safe ranges are yaw `-45..45` and pitch `5..60`, with center at `0,30`.
 - Button C uses GPIO0, the ESP32-S3 boot pin, so firmware handles it as a debounced active-low input only after boot.
-- AW88298 speaker audio is not enabled yet, but the shared internal I2C bus and AW9523 reset path are initialized.
+- AW88298 speaker output is experimental and disabled by default. `CONFIG_OPENCLAW_AUDIO_ENABLE` enables I2S0 TX; `CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK` separately enables MCLK on GPIO0. When GPIO0 MCLK is enabled, Button C is disabled to avoid breaking the audio clock or BOOT pin behavior.
 
 ## v0.5 Motion Validation
 
@@ -104,3 +107,13 @@ The aliases `neutral`, `loving`, `kissy`, `embarrassed`, and `shocked` are also 
 7. Touch validation: double tap should summon/listen and nod when motion is available; long press should sleep/wake and lower the head; left/right swipes should lightly look left/right.
 
 v0.5 intentionally does not add audio, microphone, WebSocket, camera, IMU, OTA, or device-side long-term memory storage.
+
+## v0.6 Audio Validation
+
+1. Default build: leave `CONFIG_OPENCLAW_AUDIO_ENABLE=n`; confirm `hello.features.audio_out=false` and existing v0.5 behavior is unchanged.
+2. Experimental speaker build: enable `CONFIG_OPENCLAW_AUDIO_ENABLE=y`; confirm logs show I2S speaker TX on WS GPIO33, BCLK GPIO34, DOUT GPIO13. Leave `CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK=n` first, then try it only if the AW88298 path needs MCLK.
+3. Send `{"action":"beep","freq":880,"duration_ms":120,"volume":30}` and confirm a short beep or a clear `audio unavailable` error.
+4. Confirm `self.audio.beep` appears in MCP `tools/list` only when speaker output initialized successfully.
+5. Re-test touch, LED, TCP heartbeat, and motion after beep. Button C is only disabled when `CONFIG_OPENCLAW_AUDIO_USE_GPIO0_MCLK=y`.
+
+v0.6 intentionally does not add microphone input, TTS, audio streaming, WebSocket, wake word, or echo cancellation.

@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
+#include "audiodriver.h"
 #include "body_service.h"
 #include "emotions.h"
 #include "freertos/FreeRTOS.h"
@@ -90,6 +91,20 @@ static const char *motion_error_message(esp_err_t err)
     }
     if (err == ESP_ERR_INVALID_STATE) {
         return "motion not initialized";
+    }
+    return esp_err_to_name(err);
+}
+
+static const char *audio_error_message(esp_err_t err)
+{
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        return "audio unavailable";
+    }
+    if (err == ESP_ERR_INVALID_ARG) {
+        return "invalid audio";
+    }
+    if (err == ESP_ERR_TIMEOUT) {
+        return "audio busy";
     }
     return esp_err_to_name(err);
 }
@@ -353,6 +368,23 @@ static cJSON *mcp_schema_motion_look_at(void)
     return schema;
 }
 
+static cJSON *mcp_schema_audio_beep(void)
+{
+    cJSON *schema = mcp_tool_schema_object();
+    cJSON *props = cJSON_GetObjectItem(schema, "properties");
+    const char *names[] = {"frequency_hz", "duration_ms", "volume"};
+    int min[] = {80, 20, 0};
+    int max[] = {4000, 2000, 100};
+    for (int i = 0; i < 3; ++i) {
+        cJSON *field = cJSON_CreateObject();
+        cJSON_AddStringToObject(field, "type", "integer");
+        cJSON_AddNumberToObject(field, "minimum", min[i]);
+        cJSON_AddNumberToObject(field, "maximum", max[i]);
+        cJSON_AddItemToObject(props, names[i], field);
+    }
+    return schema;
+}
+
 static void mcp_handle_initialize(cJSON *id)
 {
     cJSON *result = cJSON_CreateObject();
@@ -395,6 +427,9 @@ static void mcp_handle_tools_list(cJSON *id)
         mcp_add_tool(tools, "self.motion.shake", "Run a short shake gesture.", mcp_tool_schema_object());
         mcp_add_tool(tools, "self.motion.tilt", "Run a short tilt gesture.", mcp_tool_schema_object());
     }
+    if (audio_is_available()) {
+        mcp_add_tool(tools, "self.audio.beep", "Play a short speaker beep.", mcp_schema_audio_beep());
+    }
     cJSON_AddItemToObject(result, "tools", tools);
     cJSON_AddStringToObject(result, "nextCursor", "");
     mcp_send_result(id, result);
@@ -423,14 +458,15 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         }
         presence_snapshot_t snapshot;
         presence_get_snapshot(&snapshot);
-        char status[224];
+        char status[256];
         snprintf(status, sizeof(status),
-                 "{\"uptime\":%lld,\"wifi_rssi\":%d,\"presence_state\":\"%s\",\"connection_state\":\"%s\",\"emotion\":\"%s\",\"motion_available\":%s}",
+                 "{\"uptime\":%lld,\"wifi_rssi\":%d,\"presence_state\":\"%s\",\"connection_state\":\"%s\",\"emotion\":\"%s\",\"motion_available\":%s,\"audio_out_available\":%s}",
                  esp_timer_get_time() / 1000000LL, rssi,
                  presence_state_to_string(snapshot.presence),
                  presence_connection_to_string(snapshot.connection),
                  snapshot.emotion,
-                 body_motion_available() ? "true" : "false");
+                 body_motion_available() ? "true" : "false",
+                 audio_is_available() ? "true" : "false");
         mcp_send_result(id, mcp_tool_text_result(status));
     } else if (strcmp(name, "self.emotion.set") == 0) {
         cJSON *value_json = cJSON_GetObjectItem(args, "value");
@@ -506,6 +542,20 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
             mcp_send_result(id, mcp_tool_text_result("queued"));
         } else {
             mcp_send_error(id, -32000, motion_error_message(err));
+        }
+    } else if (strcmp(name, "self.audio.beep") == 0) {
+        int frequency = json_int_or_default(args, "frequency_hz", json_int_or_default(args, "freq", 880));
+        int duration = json_int_or_default(args, "duration_ms", 120);
+        int volume = json_int_or_default(args, "volume", 30);
+        if (frequency < 80 || frequency > 4000 || duration < 20 || duration > 2000 || volume < 0 || volume > 100) {
+            mcp_send_error(id, -32602, "frequency_hz 80..4000, duration_ms 20..2000, volume 0..100");
+        } else {
+            esp_err_t err = audio_beep((uint32_t)frequency, (uint32_t)duration, (uint8_t)volume);
+            if (err == ESP_OK) {
+                mcp_send_result(id, mcp_tool_text_result("ok"));
+            } else {
+                mcp_send_error(id, -32000, audio_error_message(err));
+            }
         }
     } else {
         mcp_send_error(id, -32601, "Unknown tool");
@@ -792,6 +842,20 @@ void protocol_handle_line(const char *line, const char *source)
                 send_error(action, motion_error_message(err));
             }
         }
+    } else if (strcmp(action, "beep") == 0) {
+        int frequency = json_int_or_default(root, "frequency_hz", json_int_or_default(root, "freq", 880));
+        int duration = json_int_or_default(root, "duration_ms", 120);
+        int volume = json_int_or_default(root, "volume", 30);
+        if (frequency < 80 || frequency > 4000 || duration < 20 || duration > 2000 || volume < 0 || volume > 100) {
+            send_error(action, "frequency_hz 80..4000, duration_ms 20..2000, volume 0..100");
+        } else {
+            esp_err_t err = audio_beep((uint32_t)frequency, (uint32_t)duration, (uint8_t)volume);
+            if (err == ESP_OK) {
+                send_ok(action, "ok");
+            } else {
+                send_error(action, audio_error_message(err));
+            }
+        }
     } else if (strcmp(action, "ping") == 0) {
         send_ok(action, "pong");
     } else {
@@ -836,7 +900,7 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "motion", body_motion_available());
     cJSON_AddBoolToObject(features, "servo", body_motion_available());
     cJSON_AddBoolToObject(features, "audio_in", false);
-    cJSON_AddBoolToObject(features, "audio_out", false);
+    cJSON_AddBoolToObject(features, "audio_out", audio_is_available());
     cJSON_AddItemToObject(root, "features", features);
 
     uint8_t mac[6] = {0};
@@ -864,7 +928,15 @@ void protocol_emit_hello(void)
         cJSON_AddStringToObject(root, "session_id", snapshot.session_id);
     }
     presence_add_json(root);
-    cJSON_AddNullToObject(root, "audio_params");
+    if (audio_is_available()) {
+        cJSON *audio_params = cJSON_CreateObject();
+        cJSON_AddNumberToObject(audio_params, "sample_rate", CORES3_AUDIO_SAMPLE_RATE);
+        cJSON_AddStringToObject(audio_params, "format", "pcm_s16le");
+        cJSON_AddNumberToObject(audio_params, "channels", 2);
+        cJSON_AddItemToObject(root, "audio_params", audio_params);
+    } else {
+        cJSON_AddNullToObject(root, "audio_params");
+    }
 
     for (size_t i = 0; i < g_emotion_count; ++i) {
         cJSON_AddItemToArray(emotions, cJSON_CreateString(g_emotions[i].name));
@@ -932,6 +1004,7 @@ void protocol_emit_heartbeat(void)
     cJSON_AddNumberToObject(root, "uptime", esp_timer_get_time() / 1000000LL);
     cJSON_AddNumberToObject(root, "wifi_rssi", rssi);
     cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
+    cJSON_AddBoolToObject(root, "audio_out_available", audio_is_available());
     presence_add_json(root);
     send_json(root);
     cJSON_Delete(root);

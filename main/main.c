@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 
+#include "audiodriver.h"
 #include "button.h"
 #include "body_service.h"
 #include "emotions.h"
@@ -491,6 +492,7 @@ void app_main(void)
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(body_service_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(audio_init());
     ESP_ERROR_CHECK(button_init());
 
     emotion_draw("happy");
