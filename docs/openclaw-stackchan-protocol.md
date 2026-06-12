@@ -41,6 +41,8 @@ Important fields:
     "led": true,
     "touch": true,
     "gesture": true,
+    "pressure": true,
+    "tactile": true,
     "presence": true,
     "memory_context": true,
     "motion": false,
@@ -52,7 +54,7 @@ Important fields:
 }
 ```
 
-`motion`, `servo`, and `audio_out` are runtime capability flags. They are true only when the optional subsystem initialized successfully.
+`touch`, `gesture`, `pressure`, `tactile`, `motion`, `servo`, and `audio_out` are runtime capability flags. They are true only when the related subsystem initialized successfully.
 
 If `audio_out` is true, `audio_params` is:
 
@@ -175,6 +177,16 @@ Touch:
 {"event":"touch","x":120,"y":200,"intent":"attention"}
 ```
 
+Pressure/tactile contact:
+
+```json
+{"event":"pressure","source":"touchscreen","action":"press","x":120,"y":200,"intensity":40,"intent":"tactile_contact"}
+{"event":"pressure","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80,"intent":"tactile_contact"}
+{"event":"pressure","source":"touchscreen","action":"release","x":120,"y":200,"intensity":0,"intent":"tactile_contact"}
+```
+
+In v1, pressure is derived from the CoreS3 FT6336 touch panel so OpenClaw can react when the robot is touched. Future shell, head, or body pressure sensors should reuse the same event shape and set a more specific `source`.
+
 Gesture:
 
 ```json
@@ -270,6 +282,7 @@ Included:
 - Fullscreen Stackchan-style emotions.
 - LED color and breathing.
 - Touch/gesture/button events.
+- Touch-derived pressure/tactile contact events.
 - Resident presence and short-lived memory context.
 - Optional yaw/pitch motion.
 - Optional local beep.
@@ -301,6 +314,7 @@ Legacy JSON smoke test:
 - `presence`, `sleep`, and `memory_cue` still update face/LED mood.
 - `look` and `motion` return success only when motion is available; otherwise `motion unavailable`.
 - `beep` returns success only when audio output is available; otherwise `audio unavailable`.
+- Touch press/hold/release emits `pressure` events with `source`, `action`, and `intensity`.
 
 MCP smoke test:
 - `initialize` returns server info.

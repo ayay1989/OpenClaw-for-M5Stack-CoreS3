@@ -15,9 +15,10 @@ menu "OpenClaw Stackchan"
 
     config OPENCLAW_TCP_HOST
         string "OpenClaw TCP host"
-        default "127.0.0.1"
+        default "192.168.1.100"
         help
-            Host running the OpenClaw TCP bridge.
+            IPv4 address of the Windows/OpenClaw bridge on the same LAN.
+            Do not use 127.0.0.1 because it points to the CoreS3 itself.
 
     config OPENCLAW_TCP_PORT
         int "OpenClaw TCP port"

@@ -383,10 +383,14 @@ static void touch_task(void *arg)
     uint8_t chip_id = 0;
     esp_err_t err = i2c_read_reg(FT6336_I2C_ADDR, 0xA3, &chip_id);
     if (err != ESP_OK) {
+        protocol_set_tactile_available(false);
         ESP_LOGW(TAG, "FT6336 not found: %s", esp_err_to_name(err));
+        protocol_emit_hello();
         vTaskDelete(NULL);
         return;
     }
+    protocol_set_tactile_available(true);
+    protocol_emit_hello();
     ESP_LOGI(TAG, "FT6336 touch initialized, chip_id=0x%02X", chip_id);
 
     const int64_t short_touch_ms = 500;
@@ -404,6 +408,7 @@ static void touch_task(void *arg)
     int last_y = -1;
     int64_t start_ms = 0;
     int64_t pending_tap_ms = 0;
+    int read_failures = 0;
     while (true) {
         uint8_t data[6] = {0};
         int64_t now_ms = esp_timer_get_time() / 1000;
@@ -414,6 +419,7 @@ static void touch_task(void *arg)
         }
 
         if (i2c_read_regs(FT6336_I2C_ADDR, 0x02, data, sizeof(data)) == ESP_OK) {
+            read_failures = 0;
             int points = data[0] & 0x0F;
             if (points > 0) {
                 int x = ((data[1] & 0x0F) << 8) | data[2];
@@ -425,10 +431,12 @@ static void touch_task(void *arg)
                     start_y = y;
                     start_ms = now_ms;
                     protocol_emit_touch(x, y);
+                    protocol_emit_pressure("press", x, y, 40);
                 } else if (!long_press_sent && now_ms - start_ms >= long_press_ms &&
                            abs(x - start_x) + abs(y - start_y) <= tap_max_move_px) {
                     long_press_sent = true;
                     pending_tap = false;
+                    protocol_emit_pressure("hold", x, y, 80);
                     protocol_emit_gesture("long_press", x, y);
                 }
                 last_x = x;
@@ -459,8 +467,17 @@ static void touch_task(void *arg)
                             }
                         }
                     }
+                    protocol_emit_pressure("release", last_x, last_y, 0);
                     was_touched = false;
                 }
+            }
+        } else {
+            read_failures++;
+            if (was_touched && read_failures >= 3) {
+                protocol_emit_pressure("release", last_x, last_y, 0);
+                was_touched = false;
+                pending_tap = false;
+                long_press_sent = false;
             }
         }
         vTaskDelay(pdMS_TO_TICKS(50));

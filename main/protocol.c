@@ -24,6 +24,7 @@ static const char *TAG = "protocol";
 static const char *FIRMWARE_VERSION = "1.0.0";
 static protocol_send_fn_t s_sender;
 static void *s_sender_ctx;
+static bool s_tactile_available;
 
 typedef struct {
     presence_state_t state;
@@ -865,6 +866,11 @@ void protocol_handle_line(const char *line, const char *source)
     cJSON_Delete(root);
 }
 
+void protocol_set_tactile_available(bool available)
+{
+    s_tactile_available = available;
+}
+
 void protocol_emit_hello(void)
 {
     cJSON *root = cJSON_CreateObject();
@@ -893,8 +899,10 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "mcp", true);
     cJSON_AddBoolToObject(features, "emotion", true);
     cJSON_AddBoolToObject(features, "led", true);
-    cJSON_AddBoolToObject(features, "touch", true);
-    cJSON_AddBoolToObject(features, "gesture", true);
+    cJSON_AddBoolToObject(features, "touch", s_tactile_available);
+    cJSON_AddBoolToObject(features, "gesture", s_tactile_available);
+    cJSON_AddBoolToObject(features, "pressure", s_tactile_available);
+    cJSON_AddBoolToObject(features, "tactile", s_tactile_available);
     cJSON_AddBoolToObject(features, "presence", true);
     cJSON_AddBoolToObject(features, "memory_context", true);
     cJSON_AddBoolToObject(features, "motion", body_motion_available());
@@ -968,6 +976,21 @@ void protocol_emit_touch(int x, int y)
     cJSON_AddNumberToObject(root, "x", x);
     cJSON_AddNumberToObject(root, "y", y);
     cJSON_AddStringToObject(root, "intent", "attention");
+    presence_add_json(root);
+    send_json(root);
+    cJSON_Delete(root);
+}
+
+void protocol_emit_pressure(const char *action, int x, int y, int intensity)
+{
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "event", "pressure");
+    cJSON_AddStringToObject(root, "source", "touchscreen");
+    cJSON_AddStringToObject(root, "action", action);
+    cJSON_AddNumberToObject(root, "x", x);
+    cJSON_AddNumberToObject(root, "y", y);
+    cJSON_AddNumberToObject(root, "intensity", intensity);
+    cJSON_AddStringToObject(root, "intent", "tactile_contact");
     presence_add_json(root);
     send_json(root);
     cJSON_Delete(root);
