@@ -308,3 +308,12 @@ python -m unittest tests.windows_bridge.test_bridge
 - TTS 输出：第一版先用 Windows 播放，同时让 StackChan 做 speaking 表情和动作。
 - 摄像头人脸追踪：Windows 摄像头识别人脸位置，再发 `look` 给 StackChan。
 - 长期记忆：由 OpenClaw/Windows 访问，CoreS3 不保存记忆。
+
+后续增强路线：
+
+- TTS PCM 流式播放到 CoreS3 speaker。
+- WebSocket 通道。
+- MQTT 事件总线。
+- 唤醒词、VAD、打断和回声消除。
+- 可选设备端/外接麦克风。
+- OTA 和多设备联动。

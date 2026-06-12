@@ -277,7 +277,7 @@ Bad JSON:
 
 ## Stage Boundaries
 
-Included:
+Included in the current firmware/bridge contract:
 - WiFi/TCP/serial JSON.
 - Fullscreen Stackchan-style emotions.
 - LED color and breathing.
@@ -287,16 +287,18 @@ Included:
 - Optional yaw/pitch motion.
 - Optional local beep.
 
-Not included:
-- WebSocket.
-- MQTT.
-- TTS streaming.
-- Microphone input.
+Planned future enhancements:
+- WebSocket transport.
+- MQTT event bus.
+- TTS PCM streaming to the CoreS3 speaker.
+- Optional device-side or external microphone input.
 - Wake word.
 - Echo cancellation.
-- Camera.
+- CoreS3 camera or alternate camera modules if hardware allows.
 - OTA.
-- Device-side long-term memory storage.
+
+Architectural boundary:
+- Long-term memory is required for the full OpenClaw resident experience, but it remains owned by OpenClaw/Windows. CoreS3 must not persist long-term memory facts, summaries, embeddings, or private records.
 
 ## v1.0 Acceptance Checklist
 
@@ -335,10 +337,12 @@ Resident boundary:
 - The device does not persist long-term memory facts, summaries, or embeddings.
 - OpenClaw remains the memory owner.
 
-Out of scope for v1:
-- WebSocket.
-- Audio streaming.
-- Microphone input.
-- Camera.
+Deferred after v1:
+- WebSocket/MQTT transport.
+- Audio streaming to CoreS3 speaker.
+- Device-side microphone input and echo cancellation.
+- CoreS3 camera experiments.
 - OTA.
-- Device-side long-term memory.
+
+Never store on CoreS3:
+- Device-side long-term memory facts, summaries, embeddings, or private records.

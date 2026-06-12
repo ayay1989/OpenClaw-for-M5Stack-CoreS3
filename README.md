@@ -260,18 +260,50 @@ audio 验收：
 
 v1.0 完整验收清单见协议文档末尾。
 
-## 当前不包含的功能
+## 架构路线图
 
-- WebSocket / MQTT 通道
+这些能力都纳入路线图，但会按风险和硬件依赖分阶段推进。
+
+### 第一阶段：Windows 本地闭环
+
+目标是先让 OpenClaw 在家里的 Windows 电脑上稳定“入住”StackChan：
+
+- Windows 麦克风 / ASR 输入
+- Windows 唤醒词
+- Windows TTS 播放
+- Windows 摄像头人脸追踪
+- OpenClaw 访问长期记忆库
+- CoreS3 显示表情、灯光、触摸/压力反馈、按键、舵机动作
+- CoreS3 通过 TCP JSON 与 Windows Bridge 通信
+
+这是当前仓库已经优先打好的方向。它最适合 OpenClaw 和 StackChan 在同一个家庭 WiFi、Windows 电脑常开的场景。
+
+### 第二阶段：StackChan 身体音频增强
+
+目标是让声音更像从 StackChan 身体里发出：
+
 - TTS PCM 流式播放到 CoreS3 speaker
-- 设备端麦克风输入
-- 唤醒词
-- 回声消除
-- CoreS3 上板摄像头
-- OTA
-- 设备端长期记忆存储
+- CoreS3 speaker 播放期间同步嘴型/表情/灯光
+- 可选外接麦克风或设备端麦克风输入
+- 回声消除 / VAD / 打断
 
-Windows 侧已经提供 ASR、TTS、人脸追踪和 OpenClaw brain 的可扩展接口，但真实模型、真实麦克风、真实摄像头和真实 OpenClaw 记忆库需要在你的本地环境中接入。
+这部分依赖真实音频链路和硬件实测，不能只靠无硬件测试完成。
+
+### 第三阶段：家庭中枢化与多设备
+
+目标是让 StackChan 不只依赖单一 TCP 连接：
+
+- WebSocket 通道
+- MQTT 事件总线
+- 局域网服务发现
+- OTA 固件更新
+- 多 StackChan / 多房间联动
+
+这些适合在基础对话、触摸反馈、人脸追踪和音频链路稳定后再做。
+
+### 明确边界：长期记忆不放在 CoreS3
+
+“长期记忆”是必须要做的能力，但它属于 OpenClaw / Windows 侧，不属于 CoreS3 固件侧。CoreS3 只保存短期 `session_id`、`resident_id` 和 `memory_context_loaded` 状态，不把事实、总结、embedding 或私人记忆写入 Flash。
 
 ## 贡献与治理
 
