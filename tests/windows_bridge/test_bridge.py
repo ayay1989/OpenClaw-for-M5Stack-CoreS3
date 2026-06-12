@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "windows_bridge"))
 
 from openclaw_stackchan_bridge import StackChanBridge  # noqa: E402
 from openclaw_stackchan_bridge import MAX_QUEUED_COMMANDS  # noqa: E402
+from examples.openclaw_body_client import StackChanBodyClient  # noqa: E402
 
 
 class BridgeTest(unittest.TestCase):
@@ -125,6 +126,24 @@ class BridgeTest(unittest.TestCase):
             self.assertTrue(result["ok"])
             self.assertTrue(result["queued"])
             self.assertEqual(result["device_command"], {"action": "emotion", "value": "love"})
+        finally:
+            bridge.stop()
+
+    def test_body_client_uses_control_api(self) -> None:
+        bridge = self.make_bridge(auto_react=False)
+        self.assertTrue(bridge._start_control_server())
+        try:
+            assert bridge._http_server is not None
+            host, port = bridge._http_server.server_address
+            client = StackChanBodyClient(f"http://{host}:{port}")
+            self.assertTrue(client.status()["ok"])
+            result = client.start_speaking("happy")
+            self.assertTrue(result["ok"])
+            self.assertTrue(result["queued"])
+            self.assertEqual(
+                result["device_command"],
+                {"action": "presence", "state": "speaking", "emotion": "happy", "mouth": True},
+            )
         finally:
             bridge.stop()
 

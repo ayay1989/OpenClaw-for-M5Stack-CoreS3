@@ -93,6 +93,29 @@ curl -X POST http://127.0.0.1:8766/command -H "Content-Type: application/json" -
 
 这就是后续 OpenClaw、ASR/TTS、人脸追踪模块优先调用的入口。
 
+## OpenClaw 调用示例
+
+仓库里提供了一个轻量 Python client：
+
+```powershell
+python windows_bridge\examples\openclaw_body_client.py
+python windows_bridge\examples\openclaw_body_client.py --demo
+```
+
+其它 OpenClaw/ASR/TTS/视觉模块也可以直接 import：
+
+```python
+from windows_bridge.examples.openclaw_body_client import StackChanBodyClient
+
+body = StackChanBodyClient()
+body.start_listening()
+body.start_speaking("happy")
+body.look_at(10, 30)
+body.stop_speaking()
+```
+
+更完整的事件语义和职责边界见 [`docs/windows-bridge-openclaw-integration.md`](../docs/windows-bridge-openclaw-integration.md)。
+
 ## 压力反馈
 
 当前固件会把 CoreS3 触摸屏事件派生成压力事件：
