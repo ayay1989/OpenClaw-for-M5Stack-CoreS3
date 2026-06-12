@@ -38,6 +38,13 @@ body.motion("nod")
 body.stop_speaking()
 ```
 
+Conversation loop scaffold:
+
+```powershell
+python windows_bridge\examples\resident_conversation_loop.py --once "你好"
+python windows_bridge\examples\resident_conversation_loop.py --openclaw-url http://127.0.0.1:8899/chat
+```
+
 ## Body Events
 
 Pressure/tactile:
@@ -86,6 +93,14 @@ Recommended first implementation:
 6. StackChan shows face, LED, and motion synchronized with the conversation.
 
 Do not put long-term memory on CoreS3. The device receives only short-lived state.
+
+The current repository includes this scaffold:
+
+- `windows_bridge/examples/resident_conversation_loop.py`
+- keyboard text as temporary ASR input;
+- optional HTTP brain adapter for a local OpenClaw endpoint;
+- optional system TTS;
+- pressure events included in the recent event context sent to the brain.
 
 ## Face Tracking Loop
 

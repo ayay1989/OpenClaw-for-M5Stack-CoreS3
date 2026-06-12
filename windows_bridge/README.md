@@ -116,6 +116,36 @@ body.stop_speaking()
 
 更完整的事件语义和职责边界见 [`docs/windows-bridge-openclaw-integration.md`](../docs/windows-bridge-openclaw-integration.md)。
 
+## Resident 对话闭环骨架
+
+`resident_conversation_loop.py` 用键盘输入先模拟 ASR，用可选 HTTP URL 模拟真实 OpenClaw brain，用系统 TTS 模拟播报，同时驱动 StackChan 的 listening/thinking/speaking 表情和动作。
+
+只跑一轮：
+
+```powershell
+python windows_bridge\examples\resident_conversation_loop.py --once "你好"
+```
+
+进入持续对话：
+
+```powershell
+python windows_bridge\examples\resident_conversation_loop.py
+```
+
+接一个本地 OpenClaw HTTP 端点：
+
+```powershell
+python windows_bridge\examples\resident_conversation_loop.py --openclaw-url http://127.0.0.1:8899/chat
+```
+
+开启系统 TTS：
+
+```powershell
+python windows_bridge\examples\resident_conversation_loop.py --tts
+```
+
+这个脚本是接线骨架，不替代真实 ASR、OpenClaw 记忆库或 TTS 服务。真实模块接入后，应保留相同的身体调用顺序：`listening -> thinking -> speaking -> idle`。
+
 ## 压力反馈
 
 当前固件会把 CoreS3 触摸屏事件派生成压力事件：
