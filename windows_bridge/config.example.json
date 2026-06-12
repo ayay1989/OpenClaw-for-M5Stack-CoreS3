@@ -1,0 +1,8 @@
+{
+  "bridge_url": "http://127.0.0.1:8766",
+  "openclaw_url": null,
+  "tts_enabled": false,
+  "event_limit": 20,
+  "face_yaw_limit": 35,
+  "face_lost_timeout_s": 2.0
+}

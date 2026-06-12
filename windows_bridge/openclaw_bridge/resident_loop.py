@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .body_client import StackChanBodyClient
+from .events import strongest_intent
 
 
 class BrainAdapter(Protocol):
@@ -28,13 +29,16 @@ class BrainReply:
 
 class DemoBrainAdapter:
     def reply(self, user_text: str, recent_events: list[dict[str, Any]]) -> BrainReply:
-        tactile = [event for event in recent_events if event.get("kind") == "pressure"]
-        if tactile:
-            action = tactile[-1].get("message", {}).get("action", "touch")
-            if action == "hold":
+        intent = strongest_intent(recent_events)
+        if intent is not None:
+            if intent.action == "comfort_contact":
                 return BrainReply("我感受到你在摸我。这个身体反馈已经传到 OpenClaw 这边了。", "love", "nod")
-            if action == "press":
+            if intent.action == "contact_started":
                 return BrainReply("我在这里，已经注意到你碰我了。", "happy", "nod")
+            if intent.action == "interrupt":
+                return BrainReply("我先停下来，等你重新叫我。", "normal", None)
+            if intent.action == "wake":
+                return BrainReply("我醒着呢，正在听你说。", "normal", "nod")
         if any(word in user_text.lower() for word in ("sad", "难过", "不开心")):
             return BrainReply("我听见了。我们慢一点说，我会陪着你。", "shy", "tilt")
         if any(word in user_text.lower() for word in ("sleep", "困", "睡")):

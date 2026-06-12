@@ -18,12 +18,19 @@ Reusable logic belongs in:
   - Face observation model.
   - Safe yaw/pitch conversion.
   - Smoothing, rate limiting, and lost-face recentering.
+- `windows_bridge/openclaw_bridge/events.py`
+  - Device event to OpenClaw intent mapping.
+  - Shared semantics for tactile, button, gesture, and heartbeat events.
+- `windows_bridge/openclaw_bridge/runtime.py`
+  - Runtime config loading.
+  - Shared builders for body, resident conversation loop, and face tracking.
 
 CLI-only behavior belongs in:
 
 - `windows_bridge/examples/openclaw_body_client.py`
 - `windows_bridge/examples/resident_conversation_loop.py`
 - `windows_bridge/examples/face_tracking_loop.py`
+- `windows_bridge/examples/stackchan_runtime.py`
 - `windows_bridge/tools/fake_cores3_device.py`
 
 Do not duplicate business logic in examples. Examples should import from `openclaw_bridge`.
@@ -35,6 +42,7 @@ When adding real OpenClaw, ASR, TTS, or camera integrations:
 - Add adapter classes or new modules under `openclaw_bridge` when the code is reusable.
 - Keep hardware/model/vendor-specific startup flags in `examples` or `tools`.
 - Keep CoreS3 protocol payload construction inside `StackChanBodyClient`.
+- Keep body event semantics inside `events.py`.
 - Keep face-to-servo safety limits inside `FaceTracker`.
 - Keep long-term memory outside the bridge and outside CoreS3 firmware.
 
@@ -47,6 +55,7 @@ Current test responsibilities:
 - `test_bridge.py`: TCP/HTTP bridge behavior, queueing, hello gating, body client.
 - `test_resident_loop.py`: conversation loop body-state order and tactile context.
 - `test_face_tracking.py`: face coordinate mapping, rate limit, and lost-face recenter.
+- `test_events_runtime.py`: event intent mapping and runtime config behavior.
 
 Before pushing:
 

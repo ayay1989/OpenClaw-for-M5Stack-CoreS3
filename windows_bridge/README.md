@@ -30,6 +30,14 @@ python windows_bridge\openclaw_stackchan_bridge.py --control-port 8766 --event-l
 python windows_bridge\openclaw_stackchan_bridge.py --no-auto-react
 ```
 
+统一 runtime 入口：
+
+```powershell
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --status
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --once "你好"
+python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --face-sim
+```
+
 CoreS3 的 `CONFIG_OPENCLAW_TCP_HOST` 需要填写 Windows 电脑在局域网里的 IPv4 地址，例如：
 
 ```text
