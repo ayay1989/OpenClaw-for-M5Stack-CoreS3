@@ -45,6 +45,7 @@ def main() -> int:
     parser.add_argument("--voice", default="zh-CN-YunxiNeural")
     parser.add_argument("--token", default=None)
     parser.add_argument("--wait-s", default=15, type=int)
+    parser.add_argument("--require-device", action="store_true", help="fail unless a CoreS3 device is connected")
     args = parser.parse_args()
 
     deadline = time.time() + args.wait_s
@@ -59,6 +60,13 @@ def main() -> int:
             time.sleep(1)
     else:
         raise SystemExit(f"[smoke] bridge is not reachable: {last_error}")
+
+    state = status.get("state") if isinstance(status.get("state"), dict) else {}
+    if args.require_device and not state.get("connected"):
+        raise SystemExit(
+            "[smoke] bridge is running, but CoreS3 has not connected. "
+            "Check firmware TCP host, Windows LAN IPv4, and Windows Firewall for TCP 8765."
+        )
 
     result = post_json(
         args.url.rstrip("/") + "/command",

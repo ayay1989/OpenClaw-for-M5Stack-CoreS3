@@ -79,6 +79,8 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 - Windows camera / OpenCV 人脸检测适配器
 - 语音时长估算和说话嘴型状态 cue
 - 本机控制 API token 保护和事件日志脱敏
+- Windows 安装器：生成本地 WiFi/Bridge 固件配置、烧录、注册 Bridge、运行连接与 TTS 烟测
+- Edge-TTS 男声桥接：优先推送到 CoreS3 speaker，设备音频不可用时退回 Windows 播放
 
 ## 快速开始
 
@@ -89,6 +91,8 @@ install.bat
 ```
 
 它会检查 Python/edge-tts，引导填写 WiFi 和 Windows 局域网 IP，生成本地固件配置，调用 ESP-IDF 烧录，启动 Windows Bridge，并用 Edge-TTS 做一次“你好”安装测试。
+
+安装器会要求 CoreS3 真正连上 Bridge 后才算通过；如果只启动了 Bridge 但设备没有接进来，它会给出诊断提示，而不是误报安装成功。
 
 如果你只是想先看 OpenClaw/StackChan 桥接层能不能跑，不需要 CoreS3：
 
@@ -111,6 +115,14 @@ copy windows_bridge\local_memory_context.example.json windows_bridge\local_memor
 2. 在 ESP-IDF `menuconfig` 中配置 WiFi 和 Windows 电脑局域网 IP。
 3. 编译并烧录 CoreS3 固件。
 4. 用串口或 Windows Bridge 查看 `hello`、`heartbeat`、`pressure` 等事件。
+
+连接排查：
+
+```powershell
+python windows_bridge\tools\bridge_diagnostics.py --url http://127.0.0.1:8766
+```
+
+如果启用了控制 API token，请加上 `--token <你的token>`。诊断会显示 Windows 局域网 IP、8765 监听状态、CoreS3 是否 connected、设备能力和最后心跳时间。
 
 详细步骤见下方“构建方式”和 [`windows_bridge/README.md`](windows_bridge/README.md)。
 

@@ -52,6 +52,21 @@ set /p TTS_VOICE=Voice [zh-CN-YunxiNeural]:
 if "%TTS_VOICE%"=="" set TTS_VOICE=zh-CN-YunxiNeural
 
 echo.
+echo CoreS3 speaker output is experimental because it depends on the AW88298/I2S hardware path.
+echo If enabled, the bridge will stream Edge-TTS audio to the device when CoreS3 reports audio_stream_out=true.
+set /p ENABLE_AUDIO=Enable CoreS3 speaker output? [Y/n]:
+set AUDIO_FLAG=--audio
+if /I "%ENABLE_AUDIO%"=="n" set AUDIO_FLAG=
+if /I "%ENABLE_AUDIO%"=="no" set AUDIO_FLAG=
+if not "%AUDIO_FLAG%"=="" (
+  where ffmpeg >nul 2>nul
+  if errorlevel 1 (
+    echo [ERROR] ffmpeg was not found. Install ffmpeg and add it to PATH, or rerun and choose n for CoreS3 speaker output.
+    exit /b 1
+  )
+)
+
+echo.
 echo [4/6] Writing local installer config...
 if not exist windows_bridge\logs mkdir windows_bridge\logs
 for /f %%i in ('powershell -NoProfile -Command "[guid]::NewGuid().ToString(''N'')"') do set OPENCLAW_BRIDGE_TOKEN=%%i
@@ -64,7 +79,7 @@ for /f %%i in ('powershell -NoProfile -Command "[guid]::NewGuid().ToString(''N''
 
 echo.
 echo [5/6] Flashing firmware with ESP-IDF...
-python windows_bridge\tools\write_firmware_config.py --ssid "%WIFI_SSID%" --password "%WIFI_PASSWORD%" --host "%BRIDGE_HOST%" --port 8765
+python windows_bridge\tools\write_firmware_config.py --ssid "%WIFI_SSID%" --password "%WIFI_PASSWORD%" --host "%BRIDGE_HOST%" --port 8765 %AUDIO_FLAG%
 if errorlevel 1 exit /b 1
 where idf.py >nul 2>nul
 if errorlevel 1 (
@@ -93,9 +108,10 @@ if errorlevel 1 exit /b 1
 
 echo.
 echo Running bridge smoke test and saying hello...
-python windows_bridge\tools\bridge_smoke_test.py --url http://127.0.0.1:8766 --tts-text "你好" --voice "%TTS_VOICE%" --token "%OPENCLAW_BRIDGE_TOKEN%"
+python windows_bridge\tools\bridge_smoke_test.py --url http://127.0.0.1:8766 --tts-text "你好" --voice "%TTS_VOICE%" --token "%OPENCLAW_BRIDGE_TOKEN%" --require-device
 if errorlevel 1 (
   echo [WARN] Smoke test failed. Check windows_bridge\logs\bridge.log and Windows Firewall.
+  python windows_bridge\tools\bridge_diagnostics.py --url http://127.0.0.1:8766 --token "%OPENCLAW_BRIDGE_TOKEN%"
   exit /b 1
 )
 

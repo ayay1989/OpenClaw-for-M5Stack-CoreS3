@@ -50,6 +50,7 @@ def main() -> int:
             "windows_bridge/examples/stackchan_runtime.py",
             "windows_bridge/tools/fake_cores3_device.py",
             "windows_bridge/tools/fake_openclaw_brain.py",
+            "windows_bridge/tools/bridge_diagnostics.py",
             "windows_bridge/tools/bridge_smoke_test.py",
             "windows_bridge/tools/write_firmware_config.py",
         ]

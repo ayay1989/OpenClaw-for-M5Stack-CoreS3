@@ -320,6 +320,26 @@ python windows_bridge\tools\fake_cores3_device.py --host 127.0.0.1 --port 8765
 python -m unittest tests.windows_bridge.test_bridge
 ```
 
+真机连接诊断：
+
+```powershell
+python windows_bridge\tools\bridge_diagnostics.py --url http://127.0.0.1:8766
+```
+
+如果 Bridge 是安装器注册的服务，并启用了 token：
+
+```powershell
+python windows_bridge\tools\bridge_diagnostics.py --url http://127.0.0.1:8766 --token %OPENCLAW_BRIDGE_TOKEN%
+```
+
+诊断会显示：
+
+- Windows 当前可用的局域网 IPv4，固件里的 TCP host 应该填这里面的一个，不要填 `127.0.0.1`。
+- 本机 `8765` 是否在监听。
+- CoreS3 是否已经 connected。
+- CoreS3 上报的 features，例如 `motion`、`touch`、`audio_stream_out`。
+- 最近 heartbeat 距离现在多久。
+
 ## WebSocket 家庭 WiFi 通道
 
 Bridge 可以额外启动 WebSocket API，让同一家庭 WiFi 内的 OpenClaw、控制端或调试工具连接到 Windows 电脑：
@@ -400,19 +420,16 @@ Bridge 支持控制 API 里的 TTS 动作：
 - 如果设备音频流不可用，Bridge 会退回 Windows 本机播放，同时让 StackChan 进入 speaking 表情。
 - 如果 edge-tts 或播放工具不可用，API 会返回 `mode=unavailable`，不会误报成设备已发声。
 
-## 后续接 OpenClaw
+## 当前接入 OpenClaw 的方式
 
-建议下一步在这个 Bridge 中增加：
+- OpenClaw 文本输出：调用 Bridge `/command`，发送 `presence`、`emotion`、`motion`、`tts` 等动作。
+- Windows 麦克风输入：Bridge 侧 ASR source 负责把语音转 transcript，再交给 OpenClaw brain adapter。
+- TTS：OpenClaw 或本地会话循环发送 `{"action":"tts","text":"..."}`，Bridge 使用 Edge-TTS 男声处理。
+- 人脸追踪：Windows 摄像头/OpenCV 适配器识别人脸位置，再通过 Bridge 发送 `look`。
+- 长期记忆：由 OpenClaw/Windows 读取和注入短期 `memory_context`，CoreS3 不保存长期记忆。
 
-- OpenClaw 会话适配器：调用本机 `/command` API，把 OpenClaw 输出转成 `presence`、`emotion`、`look`、`motion`。
-- ASR 输入：Windows 麦克风转文字。
-- TTS 输出：第一版先用 Windows 播放，同时让 StackChan 做 speaking 表情和动作。
-- 摄像头人脸追踪：Windows 摄像头识别人脸位置，再发 `look` 给 StackChan。
-- 长期记忆：由 OpenClaw/Windows 访问，CoreS3 不保存记忆。
+需要真机验收的硬件点：
 
-后续增强路线：
-
-- TTS PCM 流式播放到 CoreS3 speaker。
-- 唤醒词、VAD、打断和回声消除。
-- 可选设备端/外接麦克风。
-- OTA 和多设备联动。
+- CoreS3 speaker 是否能成功初始化 AW88298/I2S，并上报 `audio_stream_out=true`。
+- StackChan 舵机供电链路是否可用，并上报 `motion=true`。
+- 触摸事件是否从 FT6336 正常上报为 `pressure` 和 `gesture`。
