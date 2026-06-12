@@ -8,8 +8,13 @@ Use this checklist before tagging or announcing a public release.
 - README is Chinese-first and explains the brain/body boundary.
 - README highlights firmware, Windows Bridge, OpenClaw tools, tactile feedback, face tracking, and memory boundaries.
 - Protocol governance is documented in `docs/protocol-governance.md`.
+- Protocol JSON Schema exists under `docs/schema/`.
+- Protocol sample JSONL exists under `docs/examples/`.
+- Hardware validation log exists at `docs/hardware-validation-log.md`.
 - No real WiFi SSID, WiFi password, home IP, token, or private memory data is committed.
 - `windows_bridge/config.example.json` uses only local/example values.
+- `windows_bridge/config.local.example.json` exists for local real integration.
+- `windows_bridge/local_memory_context.example.json` exists and contains example-only memory.
 - `.gitignore` excludes local runtime config, event logs, Python caches, and ESP-IDF build outputs.
 
 ## Firmware
@@ -52,6 +57,12 @@ python windows_bridge\tools\fake_openclaw_brain.py
 
 ```powershell
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --face-sim
+```
+
+- Protocol schema samples validate:
+
+```powershell
+python windows_bridge\tools\validate_protocol_schema.py
 ```
 
 ## Real Integration

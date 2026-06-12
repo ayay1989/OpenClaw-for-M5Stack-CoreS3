@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ayay1989/M5Stack-CoreS3/docs/schema/openclaw-stackchan-message.schema.json",
+  "title": "OpenClaw StackChan newline JSON message",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/legacy_action" },
+    { "$ref": "#/$defs/event" },
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/hello_ack" },
+    { "$ref": "#/$defs/memory_context" },
+    { "$ref": "#/$defs/status_response" },
+    { "$ref": "#/$defs/mcp_envelope" }
+  ],
+  "$defs": {
+    "emotion": {
+      "type": "string",
+      "enum": ["happy", "normal", "sad", "angry", "surprised", "sleepy", "shy", "love"]
+    },
+    "presence_state": {
+      "type": "string",
+      "enum": ["online_idle", "listening", "thinking", "speaking", "sleeping"]
+    },
+    "legacy_action": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["ping", "emotion", "led", "led_effect", "presence", "sleep", "memory_cue", "look", "motion", "beep"]
+        },
+        "value": { "$ref": "#/$defs/emotion" },
+        "r": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "g": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "b": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "effect": { "type": "string", "enum": ["breath"] },
+        "speed": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "state": { "$ref": "#/$defs/presence_state" },
+        "emotion": { "$ref": "#/$defs/emotion" },
+        "mouth": { "type": "boolean" },
+        "enabled": { "type": "boolean" },
+        "ttl_ms": { "type": "integer", "minimum": 100, "maximum": 3600000 },
+        "yaw": { "type": "integer", "minimum": -45, "maximum": 45 },
+        "pitch": { "type": "integer", "minimum": 5, "maximum": 60 },
+        "duration_ms": { "type": "integer", "minimum": 20, "maximum": 3000 },
+        "gesture": { "type": "string", "enum": ["center", "nod", "shake", "tilt"] },
+        "freq": { "type": "integer", "minimum": 80, "maximum": 4000 },
+        "frequency_hz": { "type": "integer", "minimum": 80, "maximum": 4000 },
+        "volume": { "type": "integer", "minimum": 0, "maximum": 100 }
+      },
+      "additionalProperties": true
+    },
+    "hello": {
+      "type": "object",
+      "required": ["type", "name", "protocol", "protocol_version", "features"],
+      "properties": {
+        "type": { "const": "hello" },
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "protocol": { "const": "openclaw-stackchan" },
+        "protocol_version": { "type": "integer", "minimum": 1 },
+        "transport": { "type": "string" },
+        "features": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" }
+        },
+        "device": { "type": "object" },
+        "resident": { "type": "object" },
+        "emotions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/emotion" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "hello_ack": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "hello_ack" },
+        "session_id": { "type": "string" },
+        "resident_id": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "memory_context": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "memory_context" },
+        "session_id": { "type": "string" },
+        "resident_id": { "type": "string" },
+        "ttl_ms": { "type": "integer", "minimum": 100, "maximum": 3600000 }
+      },
+      "additionalProperties": true
+    },
+    "event": {
+      "type": "object",
+      "required": ["event"],
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["button", "touch", "pressure", "gesture", "heartbeat"]
+        },
+        "pin": { "type": "string", "enum": ["A", "B", "C"] },
+        "action": { "type": "string" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "source": { "type": "string" },
+        "intensity": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "gesture": { "type": "string" },
+        "uptime": { "type": "integer", "minimum": 0 },
+        "wifi_rssi": { "type": "integer" },
+        "motion_available": { "type": "boolean" },
+        "audio_out_available": { "type": "boolean" },
+        "presence_state": { "$ref": "#/$defs/presence_state" },
+        "connection_state": { "type": "string" },
+        "emotion": { "$ref": "#/$defs/emotion" },
+        "memory_context_loaded": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    },
+    "status_response": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "type": "string", "enum": ["ok", "error"] },
+        "action": { "type": "string" },
+        "value": {},
+        "message": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "mcp_envelope": {
+      "type": "object",
+      "required": ["type", "payload"],
+      "properties": {
+        "type": { "const": "mcp" },
+        "payload": {
+          "type": "object",
+          "required": ["jsonrpc", "method"],
+          "properties": {
+            "jsonrpc": { "const": "2.0" },
+            "method": { "type": "string" },
+            "id": {},
+            "params": { "type": "object" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

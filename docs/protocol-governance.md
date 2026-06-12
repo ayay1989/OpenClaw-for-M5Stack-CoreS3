@@ -9,9 +9,11 @@ The goal is simple: contributors should be able to add body capabilities without
 The protocol source of truth is:
 
 1. `docs/openclaw-stackchan-protocol.md`
-2. Firmware parser and responder code under `main/`
-3. Windows Bridge client/tool code under `windows_bridge/openclaw_bridge/`
-4. Tests under `tests/windows_bridge/`
+2. `docs/schema/openclaw-stackchan-message.schema.json`
+3. `docs/examples/protocol-valid-messages.jsonl`
+4. Firmware parser and responder code under `main/`
+5. Windows Bridge client/tool code under `windows_bridge/openclaw_bridge/`
+6. Tests under `tests/windows_bridge/`
 
 When these disagree, update the document first, then code and tests.
 
@@ -29,20 +31,32 @@ When these disagree, update the document first, then code and tests.
 Before merging a new command:
 
 1. Add the command shape to `docs/openclaw-stackchan-protocol.md`.
-2. Define ranges, defaults, and error behavior.
-3. Add firmware parsing and response behavior.
-4. Add or update `StackChanBodyClient` helpers when the command should be used from Windows.
-5. Add `BodyToolRouter` entries only if OpenClaw should call it as a tool.
-6. Add no-hardware tests when the behavior can be validated without CoreS3.
+2. Update `docs/schema/openclaw-stackchan-message.schema.json`.
+3. Add at least one sample to `docs/examples/protocol-valid-messages.jsonl` when useful.
+4. Define ranges, defaults, and error behavior.
+5. Add firmware parsing and response behavior.
+6. Add or update `StackChanBodyClient` helpers when the command should be used from Windows.
+7. Add `BodyToolRouter` entries only if OpenClaw should call it as a tool.
+8. Add no-hardware tests when the behavior can be validated without CoreS3.
 
 ## Adding a New Body Event
 
 Before merging a new event:
 
 1. Add the event JSON example to the protocol document.
-2. Add the OpenClaw intent mapping in `windows_bridge/openclaw_bridge/events.py`.
-3. Add tests that map firmware-like event samples to intents.
-4. Keep raw event fields stable so older OpenClaw adapters can ignore unknown additions.
+2. Update the JSON schema and sample JSONL when the shape changes.
+3. Add the OpenClaw intent mapping in `windows_bridge/openclaw_bridge/events.py`.
+4. Add tests that map firmware-like event samples to intents.
+5. Keep raw event fields stable so older OpenClaw adapters can ignore unknown additions.
+
+## Validation
+
+Run this before pushing protocol changes:
+
+```powershell
+python windows_bridge\tools\validate_protocol_schema.py
+python windows_bridge\tools\run_no_hardware_checks.py
+```
 
 ## Secrets and Local Runtime Data
 

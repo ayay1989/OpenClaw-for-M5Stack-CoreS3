@@ -1,0 +1,11 @@
+{
+  "resident_id": "openclaw",
+  "session_id": "demo-session",
+  "summary": "示例：OpenClaw 作为大脑入住 StackChan。不要把真实私人记忆提交到仓库。",
+  "facts": [
+    "示例事实：用户喜欢蓝色呼吸灯。"
+  ],
+  "preferences": {
+    "voice_style": "示例：温和、简短"
+  }
+}

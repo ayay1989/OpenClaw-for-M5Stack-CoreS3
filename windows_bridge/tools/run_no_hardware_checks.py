@@ -47,6 +47,7 @@ def main() -> int:
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--face-sim"])
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--life-demo"])
     run_step([py, "windows_bridge/examples/stackchan_runtime.py", "--config", "windows_bridge/config.example.json", "--tools-list"])
+    run_step([py, "windows_bridge/tools/validate_protocol_schema.py"])
     print("[check] no-hardware validation passed")
     return 0
 

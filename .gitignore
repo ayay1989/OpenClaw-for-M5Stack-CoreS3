@@ -9,5 +9,6 @@ __pycache__/
 windows_bridge/config.local.json
 windows_bridge/*local*.json
 local_memory_context*.json
+windows_bridge/local_memory_context.json
 .env
 .env.*

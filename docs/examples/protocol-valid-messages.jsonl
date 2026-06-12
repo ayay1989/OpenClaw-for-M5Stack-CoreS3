@@ -1,0 +1,11 @@
+{"action":"ping"}
+{"action":"emotion","value":"happy"}
+{"action":"led","r":0,"g":100,"b":255}
+{"action":"presence","state":"speaking","emotion":"happy","mouth":true}
+{"action":"look","yaw":10,"pitch":30,"duration_ms":400}
+{"type":"hello_ack","session_id":"demo-session","resident_id":"openclaw"}
+{"type":"memory_context","session_id":"demo-session","resident_id":"openclaw","ttl_ms":3600000}
+{"event":"pressure","source":"touchscreen","action":"hold","x":120,"y":200,"intensity":80}
+{"event":"heartbeat","uptime":12345,"wifi_rssi":-45,"motion_available":true,"audio_out_available":false,"presence_state":"online_idle","connection_state":"openclaw_ready","emotion":"happy","memory_context_loaded":true}
+{"status":"ok","action":"emotion","value":"happy"}
+{"type":"mcp","payload":{"jsonrpc":"2.0","method":"tools/list","id":2}}

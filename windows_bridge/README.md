@@ -43,6 +43,15 @@ python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\conf
 python windows_bridge\examples\stackchan_runtime.py --config windows_bridge\config.example.json --tools-list
 ```
 
+本地真实接入建议复制本地模板：
+
+```powershell
+copy windows_bridge\config.local.example.json windows_bridge\config.local.json
+copy windows_bridge\local_memory_context.example.json windows_bridge\local_memory_context.json
+```
+
+只修改 `config.local.json` 和 `local_memory_context.json`。这些本地文件已被 `.gitignore` 忽略；不要把真实 OpenClaw 地址、token、家庭 IP 或私人记忆提交到仓库。
+
 无硬件一键检查：
 
 ```powershell
