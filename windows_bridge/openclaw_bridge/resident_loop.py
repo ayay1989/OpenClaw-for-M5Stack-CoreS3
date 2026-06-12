@@ -11,6 +11,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .asr import KeyboardTranscriptSource, TranscriptSource
 from .body_client import StackChanBodyClient
 from .events import strongest_intent
 from .memory_context import MemoryContext
@@ -154,9 +155,13 @@ class ResidentConversationLoop:
         return reply
 
     def run_console(self) -> None:
+        self.run_from_source(KeyboardTranscriptSource())
+
+    def run_from_source(self, source: TranscriptSource) -> None:
         print("Resident loop started. Type text as ASR input. Use /quit to stop.")
         while True:
-            user_text = input("you> ").strip()
+            transcript = source.listen_once()
+            user_text = transcript.text.strip()
             if user_text in {"/quit", "/exit"}:
                 self.body.stop_speaking()
                 return

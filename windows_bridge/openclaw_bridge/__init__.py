@@ -1,5 +1,6 @@
 """Reusable OpenClaw StackChan Windows bridge helpers."""
 
+from .asr import ExternalCommandAsr, KeyboardTranscriptSource, Transcript, TranscriptSource
 from .body_tools import BodyTool, BodyToolResult, BodyToolRouter
 from .body_client import StackChanBodyClient
 from .camera_vision import FaceBox, OpenCvFaceDetector, observation_from_face_box
@@ -17,10 +18,12 @@ __all__ = [
     "BodyToolRouter",
     "BrainReply",
     "DemoBrainAdapter",
+    "ExternalCommandAsr",
     "FaceBox",
     "FaceObservation",
     "FaceTracker",
     "HttpBrainAdapter",
+    "KeyboardTranscriptSource",
     "LifeCycleManager",
     "LifeState",
     "LifeStatus",
@@ -32,6 +35,8 @@ __all__ = [
     "SpeechCue",
     "StackChanBodyClient",
     "SystemTts",
+    "Transcript",
+    "TranscriptSource",
     "build_speech_cue",
     "estimate_speech_duration_s",
     "intent_from_event",

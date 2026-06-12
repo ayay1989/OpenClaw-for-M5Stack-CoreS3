@@ -104,6 +104,7 @@ The current repository includes this scaffold:
 
 - `windows_bridge/examples/resident_conversation_loop.py`
 - keyboard text as temporary ASR input;
+- external-command ASR source for Windows-side speech recognizers;
 - optional HTTP brain adapter for a local OpenClaw endpoint;
 - optional system TTS;
 - pressure events included in the recent event context sent to the brain.

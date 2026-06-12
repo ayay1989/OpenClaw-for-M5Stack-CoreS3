@@ -193,7 +193,7 @@ python windows_bridge\tools\fake_openclaw_brain.py --port 8899
 python windows_bridge\examples\resident_conversation_loop.py --tts
 ```
 
-这个脚本是接线骨架，不替代真实 ASR、OpenClaw 记忆库或 TTS 服务。真实模块接入后，应保留相同的身体调用顺序：`listening -> thinking -> speaking -> idle`。
+这个脚本是接线骨架，不替代真实 ASR、OpenClaw 记忆库或 TTS 服务。真实 ASR 可以接成外部命令：命令把一次识别结果打印到 stdout，Bridge 通过 `ExternalCommandAsr` 读取。真实模块接入后，应保留相同的身体调用顺序：`listening -> thinking -> speaking -> idle`。
 
 如果 `config.example.json` 里设置了 `memory_context_path`，HTTP brain 请求会带上短期 `memory_context`。它只用于 Windows/OpenClaw 侧生成回复，CoreS3 不保存长期记忆。
 

@@ -13,7 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "windows_bridge"))
 
-from openclaw_bridge import BodyToolRouter, HttpBrainAdapter, MemoryContext, build_speech_cue, estimate_speech_duration_s  # noqa: E402
+from openclaw_bridge import BodyToolRouter, ExternalCommandAsr, HttpBrainAdapter, MemoryContext, build_speech_cue, estimate_speech_duration_s  # noqa: E402
 from openclaw_bridge.runtime import RuntimeConfig, build_memory_context, load_config  # noqa: E402
 from tools.fake_openclaw_brain import make_handler  # noqa: E402
 
@@ -108,6 +108,17 @@ class BodyToolsMemoryTest(unittest.TestCase):
         cue = build_speech_cue("你好", "happy")
         self.assertEqual(cue.emotion, "happy")
         self.assertTrue(cue.mouth)
+
+    def test_external_command_asr_reads_stdout(self) -> None:
+        source = ExternalCommandAsr([sys.executable, "-c", "print('你好 StackChan')"])
+        transcript = source.listen_once()
+        self.assertEqual(transcript.text, "你好 StackChan")
+        self.assertEqual(transcript.source, "external_command")
+
+    def test_external_command_asr_reports_errors(self) -> None:
+        source = ExternalCommandAsr([sys.executable, "-c", "import sys; print('bad', file=sys.stderr); sys.exit(2)"])
+        with self.assertRaisesRegex(RuntimeError, "bad"):
+            source.listen_once()
 
 
 if __name__ == "__main__":

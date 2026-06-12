@@ -26,6 +26,7 @@ def main() -> int:
             "py_compile",
             "windows_bridge/openclaw_stackchan_bridge.py",
             "windows_bridge/openclaw_bridge/__init__.py",
+            "windows_bridge/openclaw_bridge/asr.py",
             "windows_bridge/openclaw_bridge/body_client.py",
             "windows_bridge/openclaw_bridge/body_tools.py",
             "windows_bridge/openclaw_bridge/camera_vision.py",

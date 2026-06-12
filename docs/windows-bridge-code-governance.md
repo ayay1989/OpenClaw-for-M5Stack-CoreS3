@@ -6,6 +6,9 @@ The Windows Bridge is split into reusable core modules and thin CLI examples.
 
 Reusable logic belongs in:
 
+- `windows_bridge/openclaw_bridge/asr.py`
+  - ASR transcript source interfaces.
+  - Keyboard and external-command transcript adapters.
 - `windows_bridge/openclaw_bridge/body_client.py`
   - Local Bridge HTTP client.
   - StackChan body commands such as presence, emotion, look, motion, LED, and beep.
@@ -52,6 +55,7 @@ When adding real OpenClaw, ASR, TTS, or camera integrations:
 
 - Add adapter classes or new modules under `openclaw_bridge` when the code is reusable.
 - Keep hardware/model/vendor-specific startup flags in `examples` or `tools`.
+- Keep ASR transcript sources in `asr.py`; do not bake microphone or vendor details into `resident_loop.py`.
 - Keep CoreS3 protocol payload construction inside `StackChanBodyClient`.
 - Keep high-level OpenClaw tools and presets in `body_tools.py`.
 - Keep body event semantics inside `events.py`.
