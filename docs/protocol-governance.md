@@ -58,6 +58,8 @@ python windows_bridge\tools\validate_protocol_schema.py
 python windows_bridge\tools\run_no_hardware_checks.py
 ```
 
+Home-network feature governance lives in `docs/home-network-capability-governance.md`.
+
 ## Secrets and Local Runtime Data
 
 Do not commit:

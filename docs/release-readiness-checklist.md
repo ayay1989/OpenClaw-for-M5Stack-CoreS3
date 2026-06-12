@@ -8,6 +8,7 @@ Use this checklist before tagging or announcing a public release.
 - README is Chinese-first and explains the brain/body boundary.
 - README highlights firmware, Windows Bridge, OpenClaw tools, tactile feedback, face tracking, and memory boundaries.
 - Protocol governance is documented in `docs/protocol-governance.md`.
+- Home-network feature governance is documented in `docs/home-network-capability-governance.md`.
 - Protocol JSON Schema exists under `docs/schema/`.
 - Protocol sample JSONL exists under `docs/examples/`.
 - Hardware validation log exists at `docs/hardware-validation-log.md`.

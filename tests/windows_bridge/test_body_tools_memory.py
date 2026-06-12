@@ -48,6 +48,22 @@ class FakeBody:
     def beep(self, freq: int = 880, duration_ms: int = 120, volume: int = 30) -> dict[str, Any]:
         return self.device_command({"action": "beep", "freq": freq, "duration_ms": duration_ms, "volume": volume})
 
+    def audio_stream_start(self, stream_id: str, direction: str = "tts_out", sample_rate: int = 24000, channels: int = 1, fmt: str = "pcm_s16le") -> dict[str, Any]:
+        return self.device_command(
+            {
+                "action": "audio_stream",
+                "op": "start",
+                "stream_id": stream_id,
+                "direction": direction,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "format": fmt,
+            }
+        )
+
+    def audio_stream_stop(self, stream_id: str) -> dict[str, Any]:
+        return self.device_command({"action": "audio_stream", "op": "stop", "stream_id": stream_id})
+
     def device_command(self, payload: dict[str, Any]) -> dict[str, Any]:
         self.commands.append(payload)
         return {"ok": True, "device_command": payload}
@@ -68,6 +84,15 @@ class BodyToolsMemoryTest(unittest.TestCase):
         self.assertIn("self.experience.react_to_touch", names)
         self.assertNotIn("self.motion.look_at", names)
         self.assertNotIn("self.audio.beep", names)
+
+    def test_audio_stream_tools_are_feature_gated(self) -> None:
+        body = FakeBody()
+        router = BodyToolRouter(body)  # type: ignore[arg-type]
+        names = [tool.name for tool in router.list_tools({"audio_stream_out": True})]
+        self.assertIn("self.audio.stream_start", names)
+        result = router.call("self.audio.stream_start", {"stream_id": "tts-1", "sample_rate": 99999})
+        self.assertTrue(result.ok)
+        self.assertEqual(body.commands[-1]["sample_rate"], 48000)
 
     def test_experience_touch_tool_runs_preset(self) -> None:
         body = FakeBody()

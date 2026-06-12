@@ -42,6 +42,8 @@ class BodyToolRouter:
             "self.motion.shake": lambda _args: self.body.motion("shake"),
             "self.motion.tilt": lambda _args: self.body.motion("tilt"),
             "self.audio.beep": self._beep,
+            "self.audio.stream_start": self._audio_stream_start,
+            "self.audio.stream_stop": self._audio_stream_stop,
             "self.sleep.set": self._sleep,
             "self.memory.cue": self._memory_cue,
             "self.experience.start_speaking": self._experience_start_speaking,
@@ -62,7 +64,7 @@ class BodyToolRouter:
             BodyTool("self.experience.react_to_touch", "Use a warm touch reaction preset.", {"emotion": "optional"}),
             BodyTool("self.experience.sleep_mode", "Use the quiet sleep body preset.", {}),
         ]
-        if features.get("motion", True) or features.get("servo", True):
+        if features.get("motion", False) or features.get("servo", False):
             tools.extend(
                 [
                     BodyTool("self.motion.look_at", "Look at a yaw/pitch target.", {"yaw": "-45..45", "pitch": "5..60", "duration_ms": "50..3000"}),
@@ -72,8 +74,15 @@ class BodyToolRouter:
                     BodyTool("self.motion.tilt", "Tilt head.", {}),
                 ]
             )
-        if features.get("audio_out", True):
+        if features.get("audio_out", False):
             tools.append(BodyTool("self.audio.beep", "Play a short local beep.", {"freq": "80..4000", "duration_ms": "20..2000", "volume": "0..100"}))
+        if features.get("audio_stream_out", False):
+            tools.extend(
+                [
+                    BodyTool("self.audio.stream_start", "Start a future CoreS3 PCM stream.", {"stream_id": "string", "sample_rate": "8000..48000", "channels": "1..2"}),
+                    BodyTool("self.audio.stream_stop", "Stop a future CoreS3 PCM stream.", {"stream_id": "string"}),
+                ]
+            )
         return tools
 
     def call(self, name: str, args: dict[str, Any] | None = None) -> BodyToolResult:
@@ -120,6 +129,19 @@ class BodyToolRouter:
             _int_arg(args, "duration_ms", 120, 20, 2000),
             _int_arg(args, "volume", 30, 0, 100),
         )
+
+    def _audio_stream_start(self, args: dict[str, Any]) -> dict[str, Any]:
+        stream_id = str(args.get("stream_id") or "tts-1")
+        return self.body.audio_stream_start(
+            stream_id,
+            direction=str(args.get("direction") or "tts_out"),
+            sample_rate=_int_arg(args, "sample_rate", 24000, 8000, 48000),
+            channels=_int_arg(args, "channels", 1, 1, 2),
+            fmt=str(args.get("format") or "pcm_s16le"),
+        )
+
+    def _audio_stream_stop(self, args: dict[str, Any]) -> dict[str, Any]:
+        return self.body.audio_stream_stop(str(args.get("stream_id") or "tts-1"))
 
     def _sleep(self, args: dict[str, Any]) -> dict[str, Any]:
         return self.body.device_command({"action": "sleep", "enabled": bool(args.get("enabled", True))})

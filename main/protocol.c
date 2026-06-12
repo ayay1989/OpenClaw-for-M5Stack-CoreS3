@@ -857,6 +857,23 @@ void protocol_handle_line(const char *line, const char *source)
                 send_error(action, audio_error_message(err));
             }
         }
+    } else if (strcmp(action, "audio_stream") == 0) {
+        cJSON *op_json = cJSON_GetObjectItem(root, "op");
+        cJSON *stream_json = cJSON_GetObjectItem(root, "stream_id");
+        if (!cJSON_IsString(op_json) || !cJSON_IsString(stream_json)) {
+            send_error(action, "audio_stream requires op and stream_id");
+        } else if (strcmp(op_json->valuestring, "start") != 0 && strcmp(op_json->valuestring, "chunk") != 0 &&
+                   strcmp(op_json->valuestring, "stop") != 0) {
+            send_error(action, "unknown audio_stream op");
+        } else if (!audio_is_available()) {
+            send_error(action, "audio unavailable");
+        } else {
+            send_error(action, "audio streaming not implemented");
+        }
+    } else if (strcmp(action, "interrupt") == 0) {
+        presence_set_state(PRESENCE_ONLINE_IDLE, "normal");
+        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "normal", false);
+        send_ok(action, "stopped");
     } else if (strcmp(action, "ping") == 0) {
         send_ok(action, "pong");
     } else {

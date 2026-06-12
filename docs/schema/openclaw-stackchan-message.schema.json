@@ -27,7 +27,7 @@
       "properties": {
         "action": {
           "type": "string",
-          "enum": ["ping", "emotion", "led", "led_effect", "presence", "sleep", "memory_cue", "look", "motion", "beep"]
+          "enum": ["ping", "emotion", "led", "led_effect", "presence", "sleep", "memory_cue", "look", "motion", "beep", "audio_stream", "interrupt"]
         },
         "value": { "$ref": "#/$defs/emotion" },
         "r": { "type": "integer", "minimum": 0, "maximum": 255 },
@@ -47,6 +47,15 @@
         "freq": { "type": "integer", "minimum": 80, "maximum": 4000 },
         "frequency_hz": { "type": "integer", "minimum": 80, "maximum": 4000 },
         "volume": { "type": "integer", "minimum": 0, "maximum": 100 }
+        ,"op": { "type": "string", "enum": ["start", "chunk", "stop"] },
+        "stream_id": { "type": "string" },
+        "direction": { "type": "string", "enum": ["tts_out", "mic_in"] },
+        "sample_rate": { "type": "integer", "minimum": 8000, "maximum": 48000 },
+        "channels": { "type": "integer", "minimum": 1, "maximum": 2 },
+        "format": { "type": "string", "enum": ["pcm_s16le"] },
+        "seq": { "type": "integer", "minimum": 0 },
+        "data_b64": { "type": "string" },
+        "source": { "type": "string" }
       },
       "additionalProperties": true
     },

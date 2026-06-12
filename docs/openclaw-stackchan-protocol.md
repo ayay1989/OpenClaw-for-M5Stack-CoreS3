@@ -66,7 +66,7 @@ If `audio_out` is true, `audio_params` is:
 }
 ```
 
-Audio is still local experimental beep only. There is no network audio streaming contract in v1.
+Audio is still local experimental beep by default. The `audio_stream` message shape is reserved for future PCM streaming and must return recoverable errors until streaming is explicitly implemented and enabled.
 
 ### Hello Field Stability
 
@@ -113,6 +113,10 @@ Supported commands:
 {"action":"look","yaw":10,"pitch":30,"duration_ms":400}
 {"action":"motion","gesture":"nod"}
 {"action":"beep","freq":880,"duration_ms":120,"volume":30}
+{"action":"audio_stream","op":"start","stream_id":"tts-1","direction":"tts_out","sample_rate":24000,"channels":1,"format":"pcm_s16le"}
+{"action":"audio_stream","op":"chunk","stream_id":"tts-1","seq":1,"data_b64":"AAAA"}
+{"action":"audio_stream","op":"stop","stream_id":"tts-1"}
+{"action":"interrupt","source":"button"}
 ```
 
 Supported emotions:
@@ -140,6 +144,21 @@ Audio beep ranges:
 - `freq` or `frequency_hz`: `80..4000`
 - `duration_ms`: `20..2000`
 - `volume`: `0..100`
+
+Audio stream fields are reserved for future TTS PCM and microphone work:
+- `op`: `start`, `chunk`, or `stop`
+- `stream_id`: stable id for one stream
+- `direction`: `tts_out` or `mic_in`
+- `sample_rate`: `8000..48000`
+- `channels`: `1..2`
+- `format`: currently `pcm_s16le`
+- `seq`: monotonically increasing chunk sequence
+- `data_b64`: base64 PCM chunk for `chunk`
+
+In the current firmware, `audio_stream` is a compatibility placeholder and returns a recoverable error unless a future audio streaming implementation is enabled.
+
+Interrupt:
+- `{"action":"interrupt","source":"button"}` asks the body to stop speaking/listening visuals and return to idle.
 
 ## Responses
 
@@ -242,6 +261,8 @@ Available only when motion initialized:
 
 Available only when experimental audio output initialized:
 - `self.audio.beep`
+
+Future audio streaming and microphone tools must be added only when explicit runtime features are present, for example `audio_stream_out=true` or `audio_in=true`.
 
 OpenClaw should call `tools/list` after each TCP reconnect because optional capabilities are runtime-dependent.
 

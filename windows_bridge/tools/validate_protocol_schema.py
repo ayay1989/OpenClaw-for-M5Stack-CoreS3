@@ -49,6 +49,11 @@ def validate_sample_against_contract(message: dict[str, Any]) -> None:
             pitch = int(message.get("pitch", 30))
             if not -45 <= yaw <= 45 or not 5 <= pitch <= 60:
                 fail("look target is outside safe range")
+        if message["action"] == "audio_stream":
+            if message.get("op") not in {"start", "chunk", "stop"}:
+                fail("audio_stream requires op=start|chunk|stop")
+            if not message.get("stream_id"):
+                fail("audio_stream requires stream_id")
         return
     if message.get("type") in {"hello_ack", "memory_context"}:
         return

@@ -7,12 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .audio_pipeline import AudioFormat
 from .body_tools import BodyToolRouter
 from .body_client import StackChanBodyClient
+from .device_registry import DeviceRegistry
 from .face_tracking import FaceObservation, FaceTracker, LookTarget
 from .lifecycle import LifeCycleManager
 from .memory_context import MemoryContext, load_memory_context
 from .resident_loop import ResidentConversationLoop, SystemTts, build_brain
+from .transports import TransportEndpoint, transport_from_config
 
 
 @dataclass
@@ -26,9 +29,16 @@ class RuntimeConfig:
     sleep_timeout_s: float = 300.0
     proactive_cooldown_s: float = 8.0
     memory_context_path: str | None = None
+    transports: list[TransportEndpoint] | None = None
+    audio_out_sample_rate: int = 24000
+    audio_in_sample_rate: int = 16000
+    wake_words: list[str] | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "RuntimeConfig":
+        transports_payload = payload.get("transports", [])
+        transports = [transport_from_config(item) for item in transports_payload if isinstance(item, dict)]
+        wake_words = payload.get("wake_words")
         return cls(
             bridge_url=str(payload.get("bridge_url") or cls.bridge_url),
             openclaw_url=payload.get("openclaw_url") or None,
@@ -39,6 +49,10 @@ class RuntimeConfig:
             sleep_timeout_s=float(payload.get("sleep_timeout_s", 300.0)),
             proactive_cooldown_s=float(payload.get("proactive_cooldown_s", 8.0)),
             memory_context_path=payload.get("memory_context_path") or None,
+            transports=transports or None,
+            audio_out_sample_rate=int(payload.get("audio_out_sample_rate", 24000)),
+            audio_in_sample_rate=int(payload.get("audio_in_sample_rate", 16000)),
+            wake_words=[str(item) for item in wake_words] if isinstance(wake_words, list) else None,
         )
 
 
@@ -61,6 +75,18 @@ def build_memory_context(config: RuntimeConfig) -> MemoryContext | None:
 
 def build_body_tools(config: RuntimeConfig) -> BodyToolRouter:
     return BodyToolRouter(build_body(config))
+
+
+def build_device_registry() -> DeviceRegistry:
+    return DeviceRegistry()
+
+
+def build_audio_out_format(config: RuntimeConfig) -> AudioFormat:
+    return AudioFormat(sample_rate=config.audio_out_sample_rate, channels=1)
+
+
+def build_audio_in_format(config: RuntimeConfig) -> AudioFormat:
+    return AudioFormat(sample_rate=config.audio_in_sample_rate, channels=1)
 
 
 def build_conversation_loop(config: RuntimeConfig) -> ResidentConversationLoop:

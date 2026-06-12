@@ -32,6 +32,7 @@ DEFAULT_CONTROL_HOST = "127.0.0.1"
 DEFAULT_CONTROL_PORT = 8766
 MAX_QUEUED_COMMANDS = 100
 MAX_EVENTS = 300
+MAX_LINE_BUFFER = 65536
 
 
 @dataclass
@@ -336,6 +337,9 @@ class StackChanBridge:
                     if not chunk:
                         break
                     buffer += chunk.decode("utf-8", errors="replace")
+                    if len(buffer) > MAX_LINE_BUFFER:
+                        print(f"[bridge] closing client: line buffer exceeded {MAX_LINE_BUFFER} bytes")
+                        break
                     while "\n" in buffer:
                         line, buffer = buffer.split("\n", 1)
                         line = line.strip()

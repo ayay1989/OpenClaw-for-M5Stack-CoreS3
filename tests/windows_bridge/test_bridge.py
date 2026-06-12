@@ -4,6 +4,7 @@ import json
 import socket
 import sys
 import tempfile
+import threading
 import unittest
 import urllib.error
 import urllib.request
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT / "windows_bridge"))
 
 from openclaw_stackchan_bridge import StackChanBridge  # noqa: E402
 from openclaw_stackchan_bridge import MAX_QUEUED_COMMANDS  # noqa: E402
+from openclaw_stackchan_bridge import MAX_LINE_BUFFER  # noqa: E402
 from openclaw_bridge import StackChanBodyClient  # noqa: E402
 
 
@@ -106,6 +108,20 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(len(bridge._send_queue), MAX_QUEUED_COMMANDS)
         self.assertEqual(bridge._send_queue[0]["seq"], 5)
         self.assertEqual(bridge._send_queue[-1]["seq"], MAX_QUEUED_COMMANDS + 4)
+
+    def test_oversized_line_buffer_disconnects_client(self) -> None:
+        bridge = self.make_bridge(auto_react=False)
+        left, right = socket.socketpair()
+        try:
+            thread = threading.Thread(target=bridge._handle_client, args=(left, ("127.0.0.1", 12345)), daemon=True)
+            thread.start()
+            right.sendall(b"{" + (b"x" * (MAX_LINE_BUFFER + 1)))
+            thread.join(timeout=2.0)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(bridge.state.connected)
+        finally:
+            bridge.stop()
+            right.close()
 
     def test_control_api_status_and_command(self) -> None:
         bridge = self.make_bridge(auto_react=False)
@@ -199,6 +215,11 @@ class BridgeTest(unittest.TestCase):
                 result["device_command"],
                 {"action": "presence", "state": "speaking", "emotion": "happy", "mouth": True},
             )
+            stream = client.audio_stream_start("tts-1")
+            self.assertEqual(stream["device_command"]["action"], "audio_stream")
+            chunk = client.audio_stream_chunk("tts-1", 1, b"\x00\x00")
+            self.assertEqual(chunk["device_command"]["data_b64"], "AAA=")
+            self.assertEqual(client.interrupt()["device_command"], {"action": "interrupt", "source": "openclaw"})
         finally:
             bridge.stop()
 

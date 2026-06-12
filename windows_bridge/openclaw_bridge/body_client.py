@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import urllib.error
 import urllib.parse
@@ -61,6 +62,43 @@ class StackChanBodyClient:
 
     def beep(self, freq: int = 880, duration_ms: int = 120, volume: int = 30) -> dict[str, Any]:
         return self.device_command({"action": "beep", "freq": freq, "duration_ms": duration_ms, "volume": volume})
+
+    def interrupt(self, source: str = "openclaw") -> dict[str, Any]:
+        return self.device_command({"action": "interrupt", "source": source})
+
+    def audio_stream_start(
+        self,
+        stream_id: str,
+        direction: str = "tts_out",
+        sample_rate: int = 24000,
+        channels: int = 1,
+        fmt: str = "pcm_s16le",
+    ) -> dict[str, Any]:
+        return self.device_command(
+            {
+                "action": "audio_stream",
+                "op": "start",
+                "stream_id": stream_id,
+                "direction": direction,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "format": fmt,
+            }
+        )
+
+    def audio_stream_chunk(self, stream_id: str, seq: int, pcm: bytes) -> dict[str, Any]:
+        return self.device_command(
+            {
+                "action": "audio_stream",
+                "op": "chunk",
+                "stream_id": stream_id,
+                "seq": seq,
+                "data_b64": base64.b64encode(pcm).decode("ascii"),
+            }
+        )
+
+    def audio_stream_stop(self, stream_id: str) -> dict[str, Any]:
+        return self.device_command({"action": "audio_stream", "op": "stop", "stream_id": stream_id})
 
     def device_command(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post("/command", {"device_command": payload})
