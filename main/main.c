@@ -120,6 +120,17 @@ static esp_err_t i2c_read_regs(uint8_t addr, uint8_t reg, uint8_t *buffer, size_
     return cores3_i2c_write_read_device(CORES3_INTERNAL_I2C_PORT, addr, &reg, 1, buffer, len, pdMS_TO_TICKS(100));
 }
 
+static void log_i2c_scan(void)
+{
+    ESP_LOGI(TAG, "scanning internal I2C bus SDA=GPIO%d SCL=GPIO%d", CORES3_I2C_SDA_GPIO, CORES3_I2C_SCL_GPIO);
+    for (uint8_t addr = 0x08; addr < 0x78; ++addr) {
+        esp_err_t err = i2c_master_probe(CORES3_INTERNAL_I2C_PORT, addr, pdMS_TO_TICKS(20));
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "I2C device found at 0x%02X", addr);
+        }
+    }
+}
+
 static void protocol_sender(const char *line, void *ctx)
 {
     (void)ctx;
@@ -531,6 +542,7 @@ void app_main(void)
     presence_set_connection(CONNECTION_OFFLINE);
     protocol_init(protocol_sender, NULL);
     ESP_ERROR_CHECK(i2c_init_internal());
+    log_i2c_scan();
     ESP_ERROR_CHECK_WITHOUT_ABORT(py32_init(CORES3_INTERNAL_I2C_PORT));
     ESP_ERROR_CHECK(lcd_init());
     ESP_ERROR_CHECK(led_init());

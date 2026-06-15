@@ -100,6 +100,14 @@ install.bat
 python windows_bridge\tools\run_no_hardware_checks.py
 ```
 
+如果固件已经烧录好，只想手动启动 Windows Bridge：
+
+```powershell
+start_bridge.bat
+```
+
+它会显示 Windows 当前局域网 IPv4、检查 `8765` 是否被占用，并用 `0.0.0.0:8765` 启动 Bridge。CoreS3 日志里的 TCP host 必须等于其中一个局域网 IPv4；如果仍然是 `EHOSTUNREACH`，优先检查 Windows IP、同一 WiFi/网段和防火墙。
+
 如果你要接自己的 OpenClaw：
 
 ```powershell
