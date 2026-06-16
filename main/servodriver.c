@@ -92,10 +92,22 @@ esp_err_t servo_init(void)
         return ESP_OK;
     }
     ESP_ERROR_CHECK_WITHOUT_ABORT(py32_set_servo_power(true));
-    vTaskDelay(pdMS_TO_TICKS(80));
+    // Wait 200ms for servo power to stabilize (HTSZ uses longer delay)
+    vTaskDelay(pdMS_TO_TICKS(200));
 
-    esp_err_t yaw = scservo_bus_ping(SERVO_YAW_ID);
-    esp_err_t pitch = scservo_bus_ping(SERVO_PITCH_ID);
+    // Retry servo detection up to 3 times for reliability (HTSZ pattern)
+    esp_err_t yaw = ESP_ERR_NOT_FOUND;
+    esp_err_t pitch = ESP_ERR_NOT_FOUND;
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        yaw = scservo_bus_ping(SERVO_YAW_ID);
+        if (yaw == ESP_OK) break;
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        pitch = scservo_bus_ping(SERVO_PITCH_ID);
+        if (pitch == ESP_OK) break;
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     s_available = (yaw == ESP_OK && pitch == ESP_OK);
     if (!s_available) {
         ESP_LOGW(TAG, "servos not detected, yaw=%s pitch=%s",
@@ -105,7 +117,8 @@ esp_err_t servo_init(void)
 
     ESP_LOGI(TAG, "servos detected yaw_id=%d pitch_id=%d", SERVO_YAW_ID, SERVO_PITCH_ID);
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_enable(true));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(servo_center());
+    // Comment out auto-centering to prevent strange positions on boot
+    // ESP_ERROR_CHECK_WITHOUT_ABORT(servo_center());
     return ESP_OK;
 }
 

@@ -224,7 +224,7 @@ static esp_err_t wifi_init(void)
 static esp_err_t i2c_init_internal(void)
 {
     ESP_RETURN_ON_ERROR(cores3_i2c_bus_init(CORES3_INTERNAL_I2C_PORT, CORES3_I2C_SDA_GPIO,
-                                            CORES3_I2C_SCL_GPIO, 400000),
+                                            CORES3_I2C_SCL_GPIO, 100000),
                         TAG, "i2c master bus init failed");
 
     uint8_t axp90 = 0;
@@ -535,6 +535,10 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_init_internal());
     log_i2c_scan();
     ESP_ERROR_CHECK_WITHOUT_ABORT(py32_init(CORES3_INTERNAL_I2C_PORT));
+    
+    // HTSZ fix: Wait 200ms after PY32 init to ensure stable power and communication
+    vTaskDelay(pdMS_TO_TICKS(200));
+    
     ESP_ERROR_CHECK(lcd_init());
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_init());

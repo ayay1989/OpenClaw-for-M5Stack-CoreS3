@@ -39,7 +39,8 @@ static esp_err_t write_block_locked(uint8_t reg, const uint8_t *data, size_t len
     }
     buffer[0] = reg;
     memcpy(buffer + 1, data, len);
-    return cores3_i2c_write_to_device(s_port, CORES3_PY32_I2C_ADDR, buffer, len + 1, pdMS_TO_TICKS(100));
+    // Increased timeout to 300ms for stability at 100kHz I2C
+    return cores3_i2c_write_to_device(s_port, CORES3_PY32_I2C_ADDR, buffer, len + 1, pdMS_TO_TICKS(300));
 }
 
 static esp_err_t read_reg_locked(uint8_t reg, uint8_t *value)
@@ -47,7 +48,8 @@ static esp_err_t read_reg_locked(uint8_t reg, uint8_t *value)
     if (s_port == I2C_NUM_MAX || value == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    return cores3_i2c_write_read_device(s_port, CORES3_PY32_I2C_ADDR, &reg, 1, value, 1, pdMS_TO_TICKS(100));
+    // Increased timeout to 300ms for stability at 100kHz I2C
+    return cores3_i2c_write_read_device(s_port, CORES3_PY32_I2C_ADDR, &reg, 1, value, 1, pdMS_TO_TICKS(300));
 }
 
 static esp_err_t write_reg_locked(uint8_t reg, uint8_t value)

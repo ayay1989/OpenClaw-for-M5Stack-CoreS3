@@ -15,8 +15,10 @@ static const char *TAG = "scservo";
 #define SCSERVO_INST_WRITE_DATA 0x03
 #define SCSERVO_REG_TORQUE_ENABLE 40
 #define SCSERVO_REG_GOAL_POSITION_L 42
-#define SCSERVO_RX_BUF_SIZE 128
-#define SCSERVO_TX_BUF_SIZE 128
+// Increased buffer sizes for reliable SCServo communication (HTSZ uses larger buffers)
+#define SCSERVO_RX_BUF_SIZE 1024
+#define SCSERVO_TX_BUF_SIZE 512
+#define SCSERVO_QUEUE_SIZE 10
 #define SCSERVO_STATUS_OK 0
 
 static SemaphoreHandle_t s_bus_lock;
@@ -136,7 +138,7 @@ esp_err_t scservo_bus_init(void)
     };
 
     esp_err_t err = uart_driver_install(SCSERVO_UART_PORT, SCSERVO_RX_BUF_SIZE,
-                                        SCSERVO_TX_BUF_SIZE, 0, NULL, 0);
+                                        SCSERVO_TX_BUF_SIZE, SCSERVO_QUEUE_SIZE, NULL, 0);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "UART%d driver install failed: %s", SCSERVO_UART_PORT, esp_err_to_name(err));
         return err;
@@ -178,7 +180,8 @@ esp_err_t scservo_bus_ping(uint8_t id)
     xSemaphoreTake(s_bus_lock, portMAX_DELAY);
     esp_err_t err = send_packet(id, SCSERVO_INST_PING, NULL, 0);
     if (err == ESP_OK) {
-        err = read_status(id, 30);
+        // Increased timeout to 200ms for reliable servo detection (HTSZ uses longer timeout)
+        err = read_status(id, 200);
     }
     xSemaphoreGive(s_bus_lock);
 

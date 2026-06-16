@@ -77,7 +77,8 @@ static void led_task(void *arg)
                 wrote_solid = true;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(25));
+        // Increased delay to 50ms to prevent I2C bus congestion and watchdog resets
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
