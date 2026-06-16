@@ -8,7 +8,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "driver/i2c.h"
+#include "driver/i2c_master.h"
 #include "esp_err.h"
 
 #define CORES3_PY32_I2C_ADDR 0x6F  // Stackchan CoreS3 PY32 helper MCU
@@ -18,4 +18,3 @@ esp_err_t py32_init(i2c_port_t port);
 bool py32_is_available(void);
 esp_err_t py32_set_servo_power(bool enabled);
 esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b);
-

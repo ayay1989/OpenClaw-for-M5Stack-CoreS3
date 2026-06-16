@@ -10,7 +10,6 @@
 #include <unistd.h>
 
 #include "driver/gpio.h"
-#include "driver/i2c.h"
 #include "esp_check.h"
 #include "esp_event.h"
 #include "esp_timer.h"
@@ -124,7 +123,7 @@ static void log_i2c_scan(void)
 {
     ESP_LOGI(TAG, "scanning internal I2C bus SDA=GPIO%d SCL=GPIO%d", CORES3_I2C_SDA_GPIO, CORES3_I2C_SCL_GPIO);
     for (uint8_t addr = 0x08; addr < 0x78; ++addr) {
-        esp_err_t err = i2c_master_probe(CORES3_INTERNAL_I2C_PORT, addr, pdMS_TO_TICKS(20));
+        esp_err_t err = cores3_i2c_probe_device(CORES3_INTERNAL_I2C_PORT, addr, pdMS_TO_TICKS(20));
         if (err == ESP_OK) {
             ESP_LOGI(TAG, "I2C device found at 0x%02X", addr);
         }
@@ -224,16 +223,9 @@ static esp_err_t wifi_init(void)
 
 static esp_err_t i2c_init_internal(void)
 {
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = CORES3_I2C_SDA_GPIO,
-        .scl_io_num = CORES3_I2C_SCL_GPIO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 400000,
-    };
-    ESP_RETURN_ON_ERROR(i2c_param_config(CORES3_INTERNAL_I2C_PORT, &conf), TAG, "i2c_param_config failed");
-    ESP_RETURN_ON_ERROR(i2c_driver_install(CORES3_INTERNAL_I2C_PORT, conf.mode, 0, 0, 0), TAG, "i2c_driver_install failed");
+    ESP_RETURN_ON_ERROR(cores3_i2c_bus_init(CORES3_INTERNAL_I2C_PORT, CORES3_I2C_SDA_GPIO,
+                                            CORES3_I2C_SCL_GPIO, 400000),
+                        TAG, "i2c master bus init failed");
 
     uint8_t axp90 = 0;
     esp_err_t axp = i2c_read_reg(AXP2101_I2C_ADDR, 0x90, &axp90);
@@ -537,7 +529,6 @@ void app_main(void)
     ESP_ERROR_CHECK(s_send_lock == NULL ? ESP_ERR_NO_MEM : ESP_OK);
 
     ESP_ERROR_CHECK(presence_init());
-    ESP_ERROR_CHECK(cores3_i2c_bus_lock_init());
     presence_set_state(PRESENCE_BOOTING, "happy");
     presence_set_connection(CONNECTION_OFFLINE);
     protocol_init(protocol_sender, NULL);
