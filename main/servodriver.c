@@ -117,6 +117,7 @@ esp_err_t servo_init(void)
         return ESP_OK;
     }
     err = py32_set_servo_power(true);
+    bool vm_powered = err == ESP_OK;
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "servo VM_EN power enable failed, probing anyway: %s", esp_err_to_name(err));
     } else {
@@ -130,6 +131,12 @@ esp_err_t servo_init(void)
     if (!s_available) {
         ESP_LOGW(TAG, "servos not detected, yaw=%s pitch=%s",
                  esp_err_to_name(yaw), esp_err_to_name(pitch));
+        if (vm_powered) {
+            s_available = true;
+            ESP_LOGW(TAG, "servo ping failed but VM_EN is on; enabling unverified motion path like Stackchan-HtSz");
+            ESP_ERROR_CHECK_WITHOUT_ABORT(servo_enable(true));
+            return ESP_OK;
+        }
         return ESP_OK;
     }
 

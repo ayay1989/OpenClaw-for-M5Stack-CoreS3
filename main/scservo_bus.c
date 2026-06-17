@@ -215,12 +215,12 @@ esp_err_t scservo_bus_write_position(uint8_t id, uint16_t position, uint16_t tim
 
     uint8_t params[] = {
         SCSERVO_REG_GOAL_POSITION_L,
-        (uint8_t)(position & 0xFF),
         (uint8_t)(position >> 8),
-        (uint8_t)(time_ms & 0xFF),
+        (uint8_t)(position & 0xFF),
         (uint8_t)(time_ms >> 8),
-        (uint8_t)(speed & 0xFF),
+        (uint8_t)(time_ms & 0xFF),
         (uint8_t)(speed >> 8),
+        (uint8_t)(speed & 0xFF),
     };
 
     xSemaphoreTake(s_bus_lock, portMAX_DELAY);
