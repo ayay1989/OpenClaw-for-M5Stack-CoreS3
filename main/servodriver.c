@@ -14,6 +14,9 @@ static const char *TAG = "servo";
 #define SERVO_GESTURE_STEP_MS 260
 #define SERVO_GESTURE_PAUSE_MS 80
 #define SERVO_DEFAULT_SPEED 0
+#define SERVO_POWER_STABILIZE_MS 200
+#define SERVO_DETECT_ATTEMPTS 3
+#define SERVO_DETECT_RETRY_DELAY_MS 40
 
 static bool s_initialized;
 static bool s_available;
@@ -73,6 +76,27 @@ static void gesture_pause(void)
     vTaskDelay(pdMS_TO_TICKS(SERVO_GESTURE_PAUSE_MS));
 }
 
+static esp_err_t detect_servo_with_retries(uint8_t id, const char *name)
+{
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 1; attempt <= SERVO_DETECT_ATTEMPTS; ++attempt) {
+        err = scservo_bus_ping(id);
+        if (err == ESP_OK) {
+            if (attempt > 1) {
+                ESP_LOGI(TAG, "%s servo detected on attempt %d", name, attempt);
+            }
+            return ESP_OK;
+        }
+
+        ESP_LOGW(TAG, "%s servo ping failed attempt %d/%d: %s",
+                 name, attempt, SERVO_DETECT_ATTEMPTS, esp_err_to_name(err));
+        if (attempt < SERVO_DETECT_ATTEMPTS) {
+            vTaskDelay(pdMS_TO_TICKS(SERVO_DETECT_RETRY_DELAY_MS));
+        }
+    }
+    return err;
+}
+
 esp_err_t servo_init(void)
 {
     if (s_initialized) {
@@ -83,7 +107,8 @@ esp_err_t servo_init(void)
     s_initialized = err == ESP_OK;
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "servo bus init failed, continuing without servos: %s", esp_err_to_name(err));
-        return err;
+        s_available = false;
+        return ESP_OK;
     }
 
     if (!py32_is_available()) {
@@ -91,11 +116,16 @@ esp_err_t servo_init(void)
         s_available = false;
         return ESP_OK;
     }
-    ESP_ERROR_CHECK_WITHOUT_ABORT(py32_set_servo_power(true));
-    vTaskDelay(pdMS_TO_TICKS(80));
+    err = py32_set_servo_power(true);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "servo VM_EN power enable failed, probing anyway: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "servo VM_EN power enabled, waiting %dms", SERVO_POWER_STABILIZE_MS);
+    }
+    vTaskDelay(pdMS_TO_TICKS(SERVO_POWER_STABILIZE_MS));
 
-    esp_err_t yaw = scservo_bus_ping(SERVO_YAW_ID);
-    esp_err_t pitch = scservo_bus_ping(SERVO_PITCH_ID);
+    esp_err_t yaw = detect_servo_with_retries(SERVO_YAW_ID, "yaw");
+    esp_err_t pitch = detect_servo_with_retries(SERVO_PITCH_ID, "pitch");
     s_available = (yaw == ESP_OK && pitch == ESP_OK);
     if (!s_available) {
         ESP_LOGW(TAG, "servos not detected, yaw=%s pitch=%s",
@@ -105,7 +135,11 @@ esp_err_t servo_init(void)
 
     ESP_LOGI(TAG, "servos detected yaw_id=%d pitch_id=%d", SERVO_YAW_ID, SERVO_PITCH_ID);
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_enable(true));
+#if CONFIG_OPENCLAW_SERVO_AUTO_CENTER_ON_BOOT
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_center());
+#else
+    ESP_LOGI(TAG, "servo startup auto-center disabled");
+#endif
     return ESP_OK;
 }
 

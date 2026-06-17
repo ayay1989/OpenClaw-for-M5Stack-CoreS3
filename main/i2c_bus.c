@@ -9,6 +9,7 @@ static const char *TAG = "i2c_bus";
 static SemaphoreHandle_t s_i2c_lock;
 static i2c_master_bus_handle_t s_bus_handle;
 static i2c_master_dev_handle_t s_devices[128];
+static uint32_t s_device_speeds[128];
 static i2c_port_t s_port = I2C_NUM_MAX;
 static uint32_t s_scl_speed_hz = 400000;
 
@@ -36,10 +37,11 @@ static esp_err_t get_device_locked(uint8_t addr, i2c_master_dev_handle_t *out_ha
         return ESP_ERR_INVALID_ARG;
     }
     if (s_devices[addr] == NULL) {
+        uint32_t speed = s_device_speeds[addr] == 0 ? s_scl_speed_hz : s_device_speeds[addr];
         i2c_device_config_t dev_cfg = {
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
             .device_address = addr,
-            .scl_speed_hz = s_scl_speed_hz,
+            .scl_speed_hz = speed,
         };
         ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(s_bus_handle, &dev_cfg, &s_devices[addr]),
                             TAG, "add device 0x%02X failed", addr);
@@ -76,6 +78,26 @@ esp_err_t cores3_i2c_bus_init(i2c_port_t port, gpio_num_t sda_gpio, gpio_num_t s
     }
     xSemaphoreGive(s_i2c_lock);
     return err;
+}
+
+esp_err_t cores3_i2c_set_device_speed(i2c_port_t port, uint8_t addr, uint32_t scl_speed_hz)
+{
+    if (port != s_port || s_bus_handle == NULL || addr >= 128 || scl_speed_hz == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_i2c_lock, portMAX_DELAY);
+    if (s_devices[addr] != NULL) {
+        esp_err_t rm_err = i2c_master_bus_rm_device(s_devices[addr]);
+        if (rm_err != ESP_OK) {
+            xSemaphoreGive(s_i2c_lock);
+            return rm_err;
+        }
+        s_devices[addr] = NULL;
+    }
+    s_device_speeds[addr] = scl_speed_hz;
+    xSemaphoreGive(s_i2c_lock);
+    return ESP_OK;
 }
 
 esp_err_t cores3_i2c_write_to_device(i2c_port_t port, uint8_t addr, const uint8_t *data, size_t len, TickType_t timeout)

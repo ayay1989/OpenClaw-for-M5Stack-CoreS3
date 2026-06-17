@@ -15,8 +15,9 @@ static const char *TAG = "scservo";
 #define SCSERVO_INST_WRITE_DATA 0x03
 #define SCSERVO_REG_TORQUE_ENABLE 40
 #define SCSERVO_REG_GOAL_POSITION_L 42
-#define SCSERVO_RX_BUF_SIZE 128
-#define SCSERVO_TX_BUF_SIZE 128
+#define SCSERVO_RX_BUF_SIZE 1024
+#define SCSERVO_TX_BUF_SIZE 1024
+#define SCSERVO_PING_TIMEOUT_MS 100
 #define SCSERVO_STATUS_OK 0
 
 static SemaphoreHandle_t s_bus_lock;
@@ -159,8 +160,9 @@ esp_err_t scservo_bus_init(void)
     s_initialized = true;
     s_available = false;
     s_failures = 0;
-    ESP_LOGI(TAG, "SCServo UART%d initialized TX=GPIO%d RX=GPIO%d baud=%d",
-             SCSERVO_UART_PORT, SCSERVO_TX_GPIO, SCSERVO_RX_GPIO, SCSERVO_BAUD_RATE);
+    ESP_LOGI(TAG, "SCServo UART%d initialized TX=GPIO%d RX=GPIO%d baud=%d rx_buf=%d tx_buf=%d queue=0",
+             SCSERVO_UART_PORT, SCSERVO_TX_GPIO, SCSERVO_RX_GPIO, SCSERVO_BAUD_RATE,
+             SCSERVO_RX_BUF_SIZE, SCSERVO_TX_BUF_SIZE);
     return ESP_OK;
 }
 
@@ -178,7 +180,7 @@ esp_err_t scservo_bus_ping(uint8_t id)
     xSemaphoreTake(s_bus_lock, portMAX_DELAY);
     esp_err_t err = send_packet(id, SCSERVO_INST_PING, NULL, 0);
     if (err == ESP_OK) {
-        err = read_status(id, 30);
+        err = read_status(id, SCSERVO_PING_TIMEOUT_MS);
     }
     xSemaphoreGive(s_bus_lock);
 

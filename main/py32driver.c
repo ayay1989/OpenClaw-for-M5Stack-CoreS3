@@ -18,9 +18,15 @@ static const char *TAG = "py32";
 #define PY32_REG_LED_RAM 0x30
 #define PY32_LED_REFRESH_BIT 0x40
 #define PY32_VM_EN_BIT 0x01
+#define PY32_INIT_ATTEMPTS 10
+#define PY32_INIT_RETRY_DELAY_MS 200
+#define PY32_INIT_TIMEOUT_MS 200
+#define PY32_CONTROL_TIMEOUT_MS 200
+#define PY32_LED_TIMEOUT_MS 50
 
 static i2c_port_t s_port = I2C_NUM_MAX;
 static bool s_available;
+static bool s_led_available;
 static bool s_initialized;
 static uint8_t s_failures;
 static int64_t s_last_led_write_us;
@@ -31,7 +37,14 @@ static uint16_t rgb888_to_565(uint8_t r, uint8_t g, uint8_t b)
     return ((uint16_t)(r & 0xF8) << 8) | ((uint16_t)(g & 0xFC) << 3) | (b >> 3);
 }
 
+static esp_err_t write_block_with_timeout_locked(uint8_t reg, const uint8_t *data, size_t len, uint32_t timeout_ms);
+
 static esp_err_t write_block_locked(uint8_t reg, const uint8_t *data, size_t len)
+{
+    return write_block_with_timeout_locked(reg, data, len, PY32_CONTROL_TIMEOUT_MS);
+}
+
+static esp_err_t write_block_with_timeout_locked(uint8_t reg, const uint8_t *data, size_t len, uint32_t timeout_ms)
 {
     uint8_t buffer[1 + CORES3_PY32_LED_COUNT * 2];
     if (s_port == I2C_NUM_MAX || data == NULL || len + 1 > sizeof(buffer)) {
@@ -39,15 +52,20 @@ static esp_err_t write_block_locked(uint8_t reg, const uint8_t *data, size_t len
     }
     buffer[0] = reg;
     memcpy(buffer + 1, data, len);
-    return cores3_i2c_write_to_device(s_port, CORES3_PY32_I2C_ADDR, buffer, len + 1, pdMS_TO_TICKS(100));
+    return cores3_i2c_write_to_device(s_port, CORES3_PY32_I2C_ADDR, buffer, len + 1, pdMS_TO_TICKS(timeout_ms));
 }
 
-static esp_err_t read_reg_locked(uint8_t reg, uint8_t *value)
+static esp_err_t read_reg_with_timeout_locked(uint8_t reg, uint8_t *value, uint32_t timeout_ms)
 {
     if (s_port == I2C_NUM_MAX || value == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
-    return cores3_i2c_write_read_device(s_port, CORES3_PY32_I2C_ADDR, &reg, 1, value, 1, pdMS_TO_TICKS(100));
+    return cores3_i2c_write_read_device(s_port, CORES3_PY32_I2C_ADDR, &reg, 1, value, 1, pdMS_TO_TICKS(timeout_ms));
+}
+
+static esp_err_t read_reg_locked(uint8_t reg, uint8_t *value)
+{
+    return read_reg_with_timeout_locked(reg, value, PY32_CONTROL_TIMEOUT_MS);
 }
 
 static esp_err_t write_reg_locked(uint8_t reg, uint8_t value)
@@ -79,17 +97,20 @@ esp_err_t py32_init(i2c_port_t port)
     s_port = port;
     s_initialized = true;
     s_available = false;
+    s_led_available = false;
     s_failures = 0;
 
     uint8_t version = 0;
     esp_err_t err = ESP_FAIL;
-    for (int i = 0; i < 5; ++i) {
-        err = read_reg_locked(PY32_REG_VERSION, &version);
+    for (int i = 0; i < PY32_INIT_ATTEMPTS; ++i) {
+        if (i > 0) {
+            vTaskDelay(pdMS_TO_TICKS(PY32_INIT_RETRY_DELAY_MS));
+        }
+        err = read_reg_with_timeout_locked(PY32_REG_VERSION, &version, PY32_INIT_TIMEOUT_MS);
         if (err == ESP_OK && version != 0 && version != 0xFF) {
             s_available = true;
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
     }
 
     if (!s_available) {
@@ -103,11 +124,13 @@ esp_err_t py32_init(i2c_port_t port)
     xSemaphoreGive(s_lock);
 
     if (err != ESP_OK) {
-        s_available = false;
+        s_led_available = false;
         ESP_LOGW(TAG, "PY32 LED config failed: %s", esp_err_to_name(err));
-        return err;
+        ESP_LOGI(TAG, "PY32 initialized at 0x%02X, version=0x%02X; LED ring unavailable", CORES3_PY32_I2C_ADDR, version);
+        return ESP_OK;
     }
 
+    s_led_available = true;
     ESP_LOGI(TAG, "PY32 initialized at 0x%02X, version=0x%02X", CORES3_PY32_I2C_ADDR, version);
     return ESP_OK;
 }
@@ -141,7 +164,7 @@ esp_err_t py32_set_servo_power(bool enabled)
 
 esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
-    if (!py32_is_available()) {
+    if (!py32_is_available() || !s_led_available) {
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -158,10 +181,10 @@ esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b)
         xSemaphoreGive(s_lock);
         return ESP_OK;
     }
-    esp_err_t err = write_block_locked(PY32_REG_LED_RAM, data, sizeof(data));
+    esp_err_t err = write_block_with_timeout_locked(PY32_REG_LED_RAM, data, sizeof(data), PY32_LED_TIMEOUT_MS);
     if (err == ESP_OK) {
         uint8_t refresh = CORES3_PY32_LED_COUNT | PY32_LED_REFRESH_BIT;
-        err = write_reg_locked(PY32_REG_LED_CFG, refresh);
+        err = write_block_with_timeout_locked(PY32_REG_LED_CFG, &refresh, sizeof(refresh), PY32_LED_TIMEOUT_MS);
     }
     if (err == ESP_OK) {
         s_last_led_write_us = now_us;
@@ -172,8 +195,8 @@ esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b)
         s_failures++;
         ESP_LOGW(TAG, "PY32 LED write failed (%u/3): %s", s_failures, esp_err_to_name(err));
         if (s_failures >= 3) {
-            s_available = false;
-            ESP_LOGW(TAG, "PY32 disabled after repeated write failures");
+            s_led_available = false;
+            ESP_LOGW(TAG, "PY32 LED ring disabled after repeated write failures; PY32 control remains available");
         }
     } else {
         s_failures = 0;

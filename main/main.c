@@ -226,6 +226,8 @@ static esp_err_t i2c_init_internal(void)
     ESP_RETURN_ON_ERROR(cores3_i2c_bus_init(CORES3_INTERNAL_I2C_PORT, CORES3_I2C_SDA_GPIO,
                                             CORES3_I2C_SCL_GPIO, 400000),
                         TAG, "i2c master bus init failed");
+    ESP_ERROR_CHECK_WITHOUT_ABORT(cores3_i2c_set_device_speed(CORES3_INTERNAL_I2C_PORT,
+                                                              CORES3_PY32_I2C_ADDR, 100000));
 
     uint8_t axp90 = 0;
     esp_err_t axp = i2c_read_reg(AXP2101_I2C_ADDR, 0x90, &axp90);
@@ -510,7 +512,7 @@ static void touch_task(void *arg)
                 long_press_sent = false;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -535,6 +537,7 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_init_internal());
     log_i2c_scan();
     ESP_ERROR_CHECK_WITHOUT_ABORT(py32_init(CORES3_INTERNAL_I2C_PORT));
+    vTaskDelay(pdMS_TO_TICKS(200));  // PY32 controls StackChan servo VM_EN and LED ring; give it a stable window.
     ESP_ERROR_CHECK(lcd_init());
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_init());
@@ -551,7 +554,7 @@ void app_main(void)
     xTaskCreate(serial_task, "serial_task", 4096, NULL, 6, NULL);
     xTaskCreate(tcp_task, "tcp_task", 6144, NULL, 7, NULL);
     xTaskCreate(heartbeat_task, "heartbeat_task", 3072, NULL, 5, NULL);
-    xTaskCreate(touch_task, "touch_task", 3072, NULL, 5, NULL);
+    xTaskCreate(touch_task, "touch_task", 3072, NULL, 6, NULL);
     xTaskCreate(startup_self_test_task, "startup_self_test", 3072, NULL, 4, NULL);
     ESP_LOGI(TAG, "OpenClaw Stackchan CoreS3 firmware started");
 }

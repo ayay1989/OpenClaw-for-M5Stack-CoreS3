@@ -42,4 +42,13 @@ menu "OpenClaw Stackchan"
             ESP32-S3 BOOT pin and this firmware's Button C input, so leave this
             off unless the speaker path requires MCLK during hardware testing.
 
+    config OPENCLAW_SERVO_AUTO_CENTER_ON_BOOT
+        bool "Auto-center servos on boot"
+        default n
+        help
+            Move yaw and pitch to the center position during startup after both
+            servos are detected. Leave this off to avoid unexpected motion on
+            power-up; explicit motion center commands still work when servos
+            are available.
+
 endmenu
