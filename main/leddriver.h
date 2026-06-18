@@ -6,6 +6,7 @@
 #error "This firmware is for ESP32-S3 only"
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "esp_err.h"
 
@@ -18,6 +19,12 @@ typedef enum {
     LED_EFFECT_BREATH,
 } led_effect_t;
 
+typedef struct {
+    bool led_gpio_write_ok;
+    bool py32_led_write_ok;
+    bool py32_led_available;
+} led_write_result_t;
+
 esp_err_t led_init(void);
-void led_set_color(uint8_t r, uint8_t g, uint8_t b);
-void led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed);
+led_write_result_t led_set_color(uint8_t r, uint8_t g, uint8_t b);
+led_write_result_t led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed);

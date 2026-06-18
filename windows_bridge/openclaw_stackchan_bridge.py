@@ -476,6 +476,7 @@ class StackChanBridge:
                 return
             with self._ws_lock:
                 self._ws_clients.add(client)
+            time.sleep(0.01)
             self._ws_send_json(client, {"type": "welcome", "state": self.state.to_public_dict(), "events": self.recent_events(limit=20)})
             print(f"[ws] client connected from {address[0]}:{address[1]}")
             while not self._stop.is_set():

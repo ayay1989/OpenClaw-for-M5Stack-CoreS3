@@ -16,5 +16,6 @@
 
 esp_err_t py32_init(i2c_port_t port);
 bool py32_is_available(void);
+bool py32_led_is_available(void);
 esp_err_t py32_set_servo_power(bool enabled);
-esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b);
+esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b, bool force);

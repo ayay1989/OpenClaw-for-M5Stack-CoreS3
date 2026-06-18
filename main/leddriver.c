@@ -21,20 +21,37 @@ static uint8_t s_g;
 static uint8_t s_b;
 static uint8_t s_speed = 3;
 
-static void led_write_raw(uint8_t r, uint8_t g, uint8_t b)
+static led_write_result_t led_write_raw(uint8_t r, uint8_t g, uint8_t b, bool force)
 {
+    led_write_result_t result = {
+        .led_gpio_write_ok = false,
+        .py32_led_write_ok = false,
+        .py32_led_available = py32_led_is_available(),
+    };
+
     if (s_channel != NULL && s_encoder != NULL) {
         uint8_t grb[3] = {g, r, b};  // SK6812/NeoPixel byte order is GRB.
         rmt_transmit_config_t tx_cfg = {
             .loop_count = 0,
         };
-        ESP_ERROR_CHECK_WITHOUT_ABORT(rmt_transmit(s_channel, s_encoder, grb, sizeof(grb), &tx_cfg));
-        ESP_ERROR_CHECK_WITHOUT_ABORT(rmt_tx_wait_all_done(s_channel, pdMS_TO_TICKS(100)));
+        esp_err_t gpio_err = rmt_transmit(s_channel, s_encoder, grb, sizeof(grb), &tx_cfg);
+        if (gpio_err == ESP_OK) {
+            gpio_err = rmt_tx_wait_all_done(s_channel, pdMS_TO_TICKS(100));
+        }
+        result.led_gpio_write_ok = gpio_err == ESP_OK;
+        if (gpio_err != ESP_OK) {
+            ESP_LOGW(TAG, "GPIO%d SK6812 write failed: %s", CORES3_LED_GPIO, esp_err_to_name(gpio_err));
+        }
     }
 
-    if (py32_is_available()) {
-        ESP_ERROR_CHECK_WITHOUT_ABORT(py32_write_led_rgb(r, g, b));
+    if (result.py32_led_available) {
+        esp_err_t py32_err = py32_write_led_rgb(r, g, b, force);
+        result.py32_led_write_ok = py32_err == ESP_OK;
+        if (py32_err != ESP_OK) {
+            ESP_LOGW(TAG, "PY32 LED write failed: %s", esp_err_to_name(py32_err));
+        }
     }
+    return result;
 }
 
 static void led_task(void *arg)
@@ -66,11 +83,11 @@ static void led_task(void *arg)
                 phase -= 6.28318f;
             }
             float brightness = (sinf(phase) + 1.0f) * 0.5f;
-            led_write_raw((uint8_t)(r * brightness), (uint8_t)(g * brightness), (uint8_t)(b * brightness));
+            (void)led_write_raw((uint8_t)(r * brightness), (uint8_t)(g * brightness), (uint8_t)(b * brightness), false);
             wrote_solid = false;
         } else {
             if (!wrote_solid || r != last_r || g != last_g || b != last_b) {
-                led_write_raw(r, g, b);
+                (void)led_write_raw(r, g, b, false);
                 last_r = r;
                 last_g = g;
                 last_b = b;
@@ -125,17 +142,17 @@ esp_err_t led_init(void)
         s_encoder = NULL;
     }
 
-    if (rmt_err != ESP_OK && !py32_is_available()) {
+    if (rmt_err != ESP_OK && !py32_led_is_available()) {
         return rmt_err;
     }
     led_set_color(0, 0, 0);
     xTaskCreate(led_task, "led_task", 3072, NULL, 5, NULL);
     ESP_LOGI(TAG, "SK6812 LED initialized on GPIO%d; PY32 ring %s",
-             CORES3_LED_GPIO, py32_is_available() ? "enabled" : "disabled");
+             CORES3_LED_GPIO, py32_led_is_available() ? "enabled" : "disabled");
     return ESP_OK;
 }
 
-void led_set_color(uint8_t r, uint8_t g, uint8_t b)
+led_write_result_t led_set_color(uint8_t r, uint8_t g, uint8_t b)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_r = r;
@@ -143,9 +160,10 @@ void led_set_color(uint8_t r, uint8_t g, uint8_t b)
     s_b = b;
     s_effect = LED_EFFECT_SOLID;
     xSemaphoreGive(s_lock);
+    return led_write_raw(r, g, b, true);
 }
 
-void led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed)
+led_write_result_t led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);
     s_r = r;
@@ -154,4 +172,5 @@ void led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed)
     s_speed = speed == 0 ? 1 : speed;
     s_effect = LED_EFFECT_BREATH;
     xSemaphoreGive(s_lock);
+    return led_write_raw(r, g, b, true);
 }

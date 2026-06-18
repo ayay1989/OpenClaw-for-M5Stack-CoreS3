@@ -121,6 +121,17 @@ static const char *audio_error_message(esp_err_t err)
     return esp_err_to_name(err);
 }
 
+static void add_led_write_result(cJSON *root, const led_write_result_t *result)
+{
+    if (root == NULL || result == NULL) {
+        return;
+    }
+    cJSON_AddBoolToObject(root, "led", result->led_gpio_write_ok || result->py32_led_write_ok);
+    cJSON_AddBoolToObject(root, "led_gpio_write_ok", result->led_gpio_write_ok);
+    cJSON_AddBoolToObject(root, "py32_led_write_ok", result->py32_led_write_ok);
+    cJSON_AddBoolToObject(root, "py32_led_available", result->py32_led_available);
+}
+
 static void copy_small(char *dst, size_t dst_len, const char *src)
 {
     if (dst == NULL || dst_len == 0) {
@@ -284,29 +295,47 @@ static void self_test_task(void *arg)
 {
     (void)arg;
     ESP_LOGI(TAG, "body self-test started");
+    led_write_result_t led_probe = {0};
 
     apply_presence_visuals_now(PRESENCE_LISTENING, "surprised", false);
-    led_set_color(255, 0, 0);
+    led_probe = led_set_color(255, 0, 0);
+    bool led_gpio_write_ok = led_probe.led_gpio_write_ok;
+    bool py32_led_write_ok = led_probe.py32_led_write_ok;
+    bool py32_led_available = led_probe.py32_led_available;
     vTaskDelay(pdMS_TO_TICKS(700));
 
     apply_presence_visuals_now(PRESENCE_SPEAKING, "love", true);
-    led_set_color(0, 255, 0);
+    led_probe = led_set_color(0, 255, 0);
+    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
+    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
+    py32_led_available = led_probe.py32_led_available;
     vTaskDelay(pdMS_TO_TICKS(700));
 
     apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
-    led_set_color(0, 0, 255);
+    led_probe = led_set_color(0, 0, 255);
+    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
+    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
+    py32_led_available = led_probe.py32_led_available;
     vTaskDelay(pdMS_TO_TICKS(700));
 
     esp_err_t motion_err = body_motion_available() ? body_motion_gesture("nod") : ESP_ERR_NOT_FOUND;
     esp_err_t audio_err = audio_is_available() ? audio_beep(880, 180, 45) : ESP_ERR_NOT_SUPPORTED;
-    led_set_breath(0, 100, 255, 3);
+    led_probe = led_set_breath(0, 100, 255, 3);
+    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
+    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
+    py32_led_available = led_probe.py32_led_available;
     presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
     apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "self_test");
     cJSON_AddBoolToObject(root, "display", true);
-    cJSON_AddBoolToObject(root, "led", true);
+    led_write_result_t led_result = {
+        .led_gpio_write_ok = led_gpio_write_ok,
+        .py32_led_write_ok = py32_led_write_ok,
+        .py32_led_available = py32_led_available,
+    };
+    add_led_write_result(root, &led_result);
     cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
     cJSON_AddStringToObject(root, "motion_result", motion_err == ESP_OK ? "ok" : motion_error_message(motion_err));
     cJSON_AddBoolToObject(root, "audio_out_available", audio_is_available());
@@ -451,6 +480,15 @@ static cJSON *mcp_tool_text_result(const char *text)
     cJSON_AddItemToArray(content, item);
     cJSON_AddItemToObject(result, "content", content);
     cJSON_AddBoolToObject(result, "isError", false);
+    return result;
+}
+
+static cJSON *mcp_led_result(const led_write_result_t *led_result)
+{
+    bool ok = led_result != NULL && (led_result->led_gpio_write_ok || led_result->py32_led_write_ok);
+    cJSON *result = mcp_tool_text_result(ok ? "ok" : "no led write");
+    cJSON_ReplaceItemInObject(result, "isError", cJSON_CreateBool(!ok));
+    add_led_write_result(result, led_result);
     return result;
 }
 
@@ -679,8 +717,8 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         if (!json_rgb_args_valid(r, g, b)) {
             mcp_send_error(id, -32602, "RGB values must be 0..255");
         } else {
-            led_set_color((uint8_t)r, (uint8_t)g, (uint8_t)b);
-            mcp_send_result(id, mcp_tool_text_result("ok"));
+            led_write_result_t result = led_set_color((uint8_t)r, (uint8_t)g, (uint8_t)b);
+            mcp_send_result(id, mcp_led_result(&result));
         }
     } else if (strcmp(name, "self.led.breath") == 0) {
         int r = json_int_or_default(args, "r", -1);
@@ -690,8 +728,8 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         if (!json_rgb_args_valid(r, g, b) || speed < 1 || speed > 10) {
             mcp_send_error(id, -32602, "RGB values must be 0..255 and speed must be 1..10");
         } else {
-            led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
-            mcp_send_result(id, mcp_tool_text_result("ok"));
+            led_write_result_t result = led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
+            mcp_send_result(id, mcp_led_result(&result));
         }
     } else if (strcmp(name, "self.motion.look_at") == 0) {
         int yaw = json_int_or_default(args, "yaw", 1000);
@@ -986,8 +1024,17 @@ void protocol_handle_line(const char *line, const char *source)
         if (!json_rgb_args_valid(r, g, b)) {
             send_error(action, "rgb out of range");
         } else {
-            led_set_color((uint8_t)r, (uint8_t)g, (uint8_t)b);
-            send_ok(action, NULL);
+            led_write_result_t result = led_set_color((uint8_t)r, (uint8_t)g, (uint8_t)b);
+            bool led_ok = result.led_gpio_write_ok || result.py32_led_write_ok;
+            cJSON *reply = cJSON_CreateObject();
+            cJSON_AddStringToObject(reply, "status", led_ok ? "ok" : "error");
+            cJSON_AddStringToObject(reply, "action", action);
+            if (!led_ok) {
+                cJSON_AddStringToObject(reply, "message", "no led write");
+            }
+            add_led_write_result(reply, &result);
+            send_json(reply);
+            cJSON_Delete(reply);
         }
     } else if (strcmp(action, "led_effect") == 0) {
         cJSON *effect_json = cJSON_GetObjectItem(root, "effect");
@@ -1002,8 +1049,18 @@ void protocol_handle_line(const char *line, const char *source)
         } else if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255 || speed < 1 || speed > 10) {
             send_error(action, "argument out of range");
         } else {
-            led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
-            send_ok(action, effect_json->valuestring);
+            led_write_result_t result = led_set_breath((uint8_t)r, (uint8_t)g, (uint8_t)b, (uint8_t)speed);
+            bool led_ok = result.led_gpio_write_ok || result.py32_led_write_ok;
+            cJSON *reply = cJSON_CreateObject();
+            cJSON_AddStringToObject(reply, "status", led_ok ? "ok" : "error");
+            cJSON_AddStringToObject(reply, "action", action);
+            cJSON_AddStringToObject(reply, "value", effect_json->valuestring);
+            if (!led_ok) {
+                cJSON_AddStringToObject(reply, "message", "no led write");
+            }
+            add_led_write_result(reply, &result);
+            send_json(reply);
+            cJSON_Delete(reply);
         }
     } else if (strcmp(action, "look") == 0) {
         int yaw = json_int_or_default(root, "yaw", 1000);
@@ -1210,7 +1267,7 @@ void protocol_emit_touch(int x, int y)
     cJSON_Delete(root);
 }
 
-void protocol_emit_pressure(const char *action, int x, int y, int intensity)
+static void apply_pressure_feedback(const char *action)
 {
     if (action != NULL && strcmp(action, "press") == 0) {
         presence_set_state(PRESENCE_LISTENING, "happy");
@@ -1222,6 +1279,11 @@ void protocol_emit_pressure(const char *action, int x, int y, int intensity)
         presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
         apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
     }
+}
+
+void protocol_emit_pressure(const char *action, int x, int y, int intensity)
+{
+    apply_pressure_feedback(action);
     protocol_emit_body_input("touch", action, "touchscreen", x, y, intensity, "tactile_contact");
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "event", "pressure");
