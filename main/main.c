@@ -539,8 +539,8 @@ void app_main(void)
     ESP_ERROR_CHECK_WITHOUT_ABORT(py32_init(CORES3_INTERNAL_I2C_PORT));
     vTaskDelay(pdMS_TO_TICKS(200));  // PY32 controls StackChan servo VM_EN and LED ring; give it a stable window.
     ESP_ERROR_CHECK(lcd_init());
-    ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(servo_init());
+    ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(body_service_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(audio_init());
     ESP_ERROR_CHECK(button_init());

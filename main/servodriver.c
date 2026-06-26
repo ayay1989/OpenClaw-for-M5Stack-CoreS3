@@ -103,7 +103,22 @@ esp_err_t servo_init(void)
         return ESP_OK;
     }
 
-    esp_err_t err = scservo_bus_init();
+    esp_err_t err = ESP_ERR_NOT_FOUND;
+    bool vm_powered = false;
+    if (!py32_is_available()) {
+        ESP_LOGW(TAG, "PY32 not available; servo VM_EN power is disabled");
+    } else {
+        err = py32_set_servo_power(true);
+        vm_powered = err == ESP_OK;
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "servo VM_EN power enable failed, probing anyway: %s", esp_err_to_name(err));
+        } else {
+            ESP_LOGI(TAG, "servo VM_EN power enabled, waiting %dms", SERVO_POWER_STABILIZE_MS);
+        }
+        vTaskDelay(pdMS_TO_TICKS(SERVO_POWER_STABILIZE_MS));
+    }
+
+    err = scservo_bus_init();
     s_initialized = err == ESP_OK;
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "servo bus init failed, continuing without servos: %s", esp_err_to_name(err));
@@ -111,19 +126,10 @@ esp_err_t servo_init(void)
         return ESP_OK;
     }
 
-    if (!py32_is_available()) {
-        ESP_LOGW(TAG, "PY32 not available; servo VM_EN power is disabled");
+    if (!vm_powered) {
         s_available = false;
         return ESP_OK;
     }
-    err = py32_set_servo_power(true);
-    bool vm_powered = err == ESP_OK;
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "servo VM_EN power enable failed, probing anyway: %s", esp_err_to_name(err));
-    } else {
-        ESP_LOGI(TAG, "servo VM_EN power enabled, waiting %dms", SERVO_POWER_STABILIZE_MS);
-    }
-    vTaskDelay(pdMS_TO_TICKS(SERVO_POWER_STABILIZE_MS));
 
     esp_err_t yaw = detect_servo_with_retries(SERVO_YAW_ID, "yaw");
     esp_err_t pitch = detect_servo_with_retries(SERVO_PITCH_ID, "pitch");
