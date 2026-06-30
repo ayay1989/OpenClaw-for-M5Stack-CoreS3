@@ -2,6 +2,7 @@
 
 from .audio_pipeline import AudioCodec, AudioFormat, AudioStreamSession, make_microphone_stream, make_tts_stream
 from .asr import ExternalCommandAsr, KeyboardTranscriptSource, Transcript, TranscriptSource
+from .auto_reactions import AutoReaction, auto_reactions_for_message
 from .body_tools import BodyTool, BodyToolResult, BodyToolRouter
 from .body_client import StackChanBodyClient
 from .camera_vision import FaceBox, OpenCvFaceDetector, observation_from_face_box
@@ -22,6 +23,7 @@ __all__ = [
     "AudioCodec",
     "AudioFormat",
     "AudioStreamSession",
+    "AutoReaction",
     "BodyIntent",
     "BodyTool",
     "BodyToolResult",
@@ -64,6 +66,7 @@ __all__ = [
     "VoiceDecision",
     "VoiceFrame",
     "build_speech_cue",
+    "auto_reactions_for_message",
     "estimate_speech_duration_s",
     "intent_from_event",
     "intents_from_events",

@@ -33,6 +33,7 @@
 #include "protocol.h"
 #include "py32driver.h"
 #include "servodriver.h"
+#include "si12tdriver.h"
 
 #define WIFI_SSID CONFIG_OPENCLAW_WIFI_SSID
 #define WIFI_PASSWORD CONFIG_OPENCLAW_WIFI_PASSWORD
@@ -543,6 +544,7 @@ void app_main(void)
     ESP_ERROR_CHECK(led_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(body_service_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(audio_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(si12t_init(CORES3_INTERNAL_I2C_PORT));
     ESP_ERROR_CHECK(button_init());
 
     emotion_draw("happy");

@@ -26,5 +26,7 @@ typedef struct {
 } led_write_result_t;
 
 esp_err_t led_init(void);
+bool led_gpio_is_available(void);
+bool led_is_available(void);
 led_write_result_t led_set_color(uint8_t r, uint8_t g, uint8_t b);
 led_write_result_t led_set_breath(uint8_t r, uint8_t g, uint8_t b, uint8_t speed);

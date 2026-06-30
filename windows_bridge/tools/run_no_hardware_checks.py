@@ -28,6 +28,7 @@ def main() -> int:
             "windows_bridge/openclaw_bridge/__init__.py",
             "windows_bridge/openclaw_bridge/audio_pipeline.py",
             "windows_bridge/openclaw_bridge/asr.py",
+            "windows_bridge/openclaw_bridge/auto_reactions.py",
             "windows_bridge/openclaw_bridge/body_client.py",
             "windows_bridge/openclaw_bridge/body_tools.py",
             "windows_bridge/openclaw_bridge/camera_vision.py",

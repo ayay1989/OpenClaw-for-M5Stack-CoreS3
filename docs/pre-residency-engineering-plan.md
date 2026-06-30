@@ -1,5 +1,7 @@
 # OpenClaw 入住前工程拆分
 
+> 项目级当前状态以 `docs/openclaw-stackchan-roadmap.md` 为准。本文只保留入住前/入住后工程拆分，不再维护独立进度看板。
+
 这份文档用于区分两类工作：
 
 - **入住前可独立完成**：不依赖真实 OpenClaw 人格、长期记忆库或日常对话体验，可以通过代码测试、fake CoreS3、fake OpenClaw 或局域网工具验证。
@@ -7,25 +9,25 @@
 
 ## 入住前可独立完成
 
-| 工程包 | 目标 | 当前状态 | 下一步 |
+| 工程包 | 目标 | 验收口径 | 备注 |
 | --- | --- | --- | --- |
-| WebSocket 家庭 WiFi 通道 | 同一家庭 WiFi 内远程订阅事件、发送设备命令 | 已实现，含 token 保护和测试 | 真机联调时确认 Windows 防火墙和 IP |
-| MQTT 事件总线 | 通过家庭 broker 发布身体事件、接收设备命令 | 已实现基础 MQTT 3.1.1 通道 | 家庭 broker 联调和账号/ACL 配置 |
-| `body_input` 身体输入层 | 给 OpenClaw 一个统一身体输入入口 | 已实现 | 后续硬件输入都接入该事件族 |
-| 多设备注册与路由 | 多 StackChan / 多房间基础模型 | 已有 registry 骨架 | 接入真实 transport 和设备连接 |
-| ASR/TTS 接口骨架 | 让真实语音服务可替换接入 | 已有 transcript source、TTS wrapper、speech cue | 增加真实服务配置示例 |
-| 人脸追踪适配 | 将人脸位置转为 `look` 命令 | 已有 OpenCV 可选适配 | Windows 摄像头真机验证 |
-| OTA 策略模型 | 定义固件包、hash、目标设备 | 已有 planning model | 真 OTA 前补签名、回滚、电源检查 |
-| 配置/密钥隔离 | 不提交家庭 IP、token、记忆 | 已实现 | 持续检查示例和 gitignore |
+| WebSocket 家庭 WiFi 通道 | 同一家庭 WiFi 内远程订阅事件、发送设备命令 | 可通过 token 保护的 WebSocket 发送命令和接收事件 | 真机联调时确认 Windows 防火墙和 IP |
+| MQTT 事件总线 | 通过家庭 broker 发布身体事件、接收设备命令 | 可向家庭 broker 发布事件并订阅设备命令主题 | 家庭 broker 需要单独配置账号/ACL |
+| `body_input` 身体输入层 | 给 OpenClaw 一个统一身体输入入口 | button、touch、pressure、gesture 能归一为 OpenClaw intent | 后续硬件输入都接入该事件族 |
+| 多设备注册与路由 | 多 StackChan / 多房间基础模型 | 能登记设备、房间、能力和 endpoint | 真实多设备 transport 需真机验证 |
+| ASR/TTS 接口骨架 | 让真实语音服务可替换接入 | transcript source、TTS wrapper、speech cue 可替换 | 真实服务配置不写入仓库 |
+| 人脸追踪适配 | 将人脸位置转为 `look` 命令 | 人脸位置能被限幅、平滑并转成安全 yaw/pitch | Windows 摄像头需真机验证 |
+| OTA 策略模型 | 定义固件包、hash、目标设备 | 能表达包、hash、目标设备和升级计划 | 真 OTA 前补签名、回滚、电源检查 |
+| 配置/密钥隔离 | 不提交家庭 IP、token、记忆 | 示例配置不含敏感信息，真实配置走本地文件或环境变量 | 持续检查 gitignore 和提交内容 |
 
 ## 入住前可做但需要硬件
 
-| 工程包 | 依赖 | 当前状态 | 边界 |
+| 工程包 | 依赖 | 预留边界 | 真机验收口径 |
 | --- | --- | --- | --- |
-| IMU 摇晃/拿起 | CoreS3 IMU 芯片和 I2C/SPI 验证 | 协议语义已预留 | 需要真机验证传感器地址和阈值 |
-| 外壳触摸/FSR 压力片 | 额外传感器和接线 | 协议语义已预留 | 硬件未接入前不能声称完成 |
-| CoreS3 PCM 播放 | AW88298/I2S 真机音频链路 | `audio_stream` 协议占位 | 需要真机音频验证 |
-| CoreS3 麦克风输入 | ES7210/I2S 采集链路 | 未实现 | 需要真实采样、VAD、回声参考 |
+| IMU 摇晃/拿起 | CoreS3 IMU 芯片和 I2C/SPI 验证 | 通过 `body_input` 的 `motion/shake` 语义接入 | 验证传感器地址、阈值和误触发率 |
+| 外壳触摸/FSR 压力片 | 额外传感器和接线 | 通过 `body_input` / `pressure` 的 `source` 和 `intensity` 扩展 | 验证接线、强度范围和释放事件 |
+| CoreS3 PCM 播放 | AW88298/I2S 真机音频链路 | 通过 `audio_stream` 协议接收 PCM | 验证采样率、音量、断流恢复和任务稳定性 |
+| CoreS3 麦克风输入 | ES7210/I2S 采集链路 | Windows-first 语音链路稳定前不作为主路径 | 验证采样、VAD、回声参考和网络回传 |
 
 ## 入住后体验调优
 
@@ -38,8 +40,13 @@
 | 长期记忆进入对话 | 取决于 OpenClaw 记忆库接口和隐私边界 |
 | 多房间响应策略 | 取决于你希望哪个身体回应、是否允许抢话 |
 
-## 当前优先级
+## 状态维护规则
 
-1. 继续治理 **多设备真实路由**，让 WebSocket/MQTT/TCP 的命令入口统一。
-2. 等真机可用后做 **IMU 摇晃/拿起** 和 **CoreS3 音频**，避免凭空写错硬件驱动。
-3. OpenClaw 入住后再做 **唤醒词、回声消除、人格化反馈、记忆闭环** 的体验细调。
+当前优先级、项目完成度和发布状态统一维护在 `docs/openclaw-stackchan-roadmap.md`。
+
+本文如需更新，只更新工程拆分边界；不要在这里新增独立的当前进度列表。
+
+## 变更记录
+
+- 2026-06-26：将“入住前可独立完成”和“入住前可做但需要硬件”表格从进度表改为静态验收边界表，避免维护第二份当前状态。
+- 2026-06-26：移除独立“当前优先级”视图，改为回指 roadmap，避免多个文档分别维护进度。

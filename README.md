@@ -39,7 +39,7 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 本项目的目标是让 **OpenClaw 成为大脑，StackChan 成为身体**。
 
 - OpenClaw / Windows 侧负责长期记忆、会话、人格、ASR、TTS、人脸识别和决策。
-- CoreS3 / StackChan 侧负责表情、灯光、触摸/手势/身体交互事件、按键、心跳和舵机动作。
+- CoreS3 / StackChan 侧负责表情、灯光命令面、触摸/手势/身体交互事件、按键、心跳，以及可选舵机动作。
 - 设备端只保存短期会话状态，不保存长期记忆、事实、总结或 embedding。
 - 身体交互反馈第一版来自 CoreS3 触摸屏：轻按/点击、双击、长按、滑动会作为 `gesture` 上报；按下、持续接触、松开会作为 `pressure` 上报。后续可叠加外壳触摸、FSR 压力片、IMU 摇晃/拿起等传感器，但对 OpenClaw 仍保持统一的身体事件语义。
 
@@ -52,15 +52,15 @@ Windows Bridge 说明：[`windows_bridge/README.md`](windows_bridge/README.md)
 - UART0 CDC 串口调试与命令输入
 - ILI9341 LCD 全屏表情显示
 - Stackchan 风格表情：`happy`、`normal`、`sad`、`angry`、`surprised`、`sleepy`、`shy`、`love`
-- SK6812 / NeoPixel 灯光控制与呼吸灯
+- LED 命令面与呼吸灯逻辑；真实灯光路径需看 `led_available`、`py32_led_available`、`led_gpio_write_ok`、`py32_led_write_ok`
 - 触摸与手势：轻按/点击、双击、长按、上下左右滑动
-- 身体交互反馈：触摸派生 `press`、`hold`、`release`，后续可扩展外壳压力和摇晃/拿起事件
+- 身体交互反馈：触摸派生 `press`、`hold`、`release`；可选 SI12T 摸头/外壳触摸通过 `source=head_si12t` 上报，仍待真机验收
 - A/B/C 按键事件上报
 - OpenClaw resident presence 状态层
 - 短期 `memory_context` 接入，不在设备端保存长期记忆
-- 可选 PY32 LED 环与舵机供电
-- 可选 Stackchan yaw/pitch 舵机动作
-- 可选实验 speaker beep
+- 可选 PY32 LED 环与舵机供电诊断，需真机确认
+- 可选 Stackchan yaw/pitch 舵机动作；只有舵机检测通过后才上报 `motion=true`
+- 可选实验 speaker beep；默认关闭，需单独启用并真机验证
 - MCP 风格 JSON-RPC 工具发现与调用
 
 ### Windows Bridge / OpenClaw 接入层

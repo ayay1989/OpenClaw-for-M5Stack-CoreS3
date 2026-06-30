@@ -28,6 +28,7 @@ static i2c_port_t s_port = I2C_NUM_MAX;
 static bool s_available;
 static bool s_led_available;
 static bool s_initialized;
+static bool s_servo_power_enabled;
 static uint8_t s_failures;
 static int64_t s_last_led_write_us;
 static SemaphoreHandle_t s_lock;
@@ -98,14 +99,13 @@ esp_err_t py32_init(i2c_port_t port)
     s_initialized = true;
     s_available = false;
     s_led_available = false;
+    s_servo_power_enabled = false;
     s_failures = 0;
 
     uint8_t version = 0;
     esp_err_t err = ESP_FAIL;
     for (int i = 0; i < PY32_INIT_ATTEMPTS; ++i) {
-        if (i > 0) {
-            vTaskDelay(pdMS_TO_TICKS(PY32_INIT_RETRY_DELAY_MS));
-        }
+        vTaskDelay(pdMS_TO_TICKS(PY32_INIT_RETRY_DELAY_MS));
         err = read_reg_with_timeout_locked(PY32_REG_VERSION, &version, PY32_INIT_TIMEOUT_MS);
         if (err == ESP_OK && version != 0 && version != 0xFF) {
             s_available = true;
@@ -145,6 +145,11 @@ bool py32_led_is_available(void)
     return py32_is_available() && s_led_available;
 }
 
+bool py32_servo_power_is_enabled(void)
+{
+    return py32_is_available() && s_servo_power_enabled;
+}
+
 static void log_power_regs_locked(const char *phase)
 {
     uint8_t mode = 0;
@@ -181,6 +186,7 @@ esp_err_t py32_set_servo_power(bool enabled)
     log_power_regs_locked("after");
     xSemaphoreGive(s_lock);
     if (err == ESP_OK) {
+        s_servo_power_enabled = enabled;
         ESP_LOGI(TAG, "servo VM_EN power %s", enabled ? "enabled" : "disabled");
     } else {
         ESP_LOGW(TAG, "servo VM_EN power write failed: %s", esp_err_to_name(err));

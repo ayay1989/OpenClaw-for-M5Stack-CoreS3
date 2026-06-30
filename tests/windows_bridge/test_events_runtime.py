@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "windows_bridge"))
 
 from openclaw_bridge import intent_from_event, strongest_intent  # noqa: E402
+from openclaw_bridge.auto_reactions import auto_reactions_for_message  # noqa: E402
 from openclaw_bridge.runtime import RuntimeConfig, face_simulation_targets, load_config  # noqa: E402
 
 
@@ -31,6 +32,13 @@ class EventsRuntimeTest(unittest.TestCase):
         assert hold is not None
         self.assertEqual(hold.kind, "body_input")
         self.assertEqual(hold.action, "comfort_contact")
+
+        pet = intent_from_event(
+            {"kind": "body_input", "message": {"event": "body_input", "input": "touch", "source": "head_si12t", "action": "pet"}}
+        )
+        self.assertIsNotNone(pet)
+        assert pet is not None
+        self.assertEqual(pet.action, "comfort_contact")
 
         shake = intent_from_event({"kind": "body_input", "message": {"event": "body_input", "input": "motion", "action": "shake"}})
         self.assertIsNotNone(shake)
@@ -55,6 +63,18 @@ class EventsRuntimeTest(unittest.TestCase):
         self.assertIsNotNone(intent)
         assert intent is not None
         self.assertEqual(intent.action, "interrupt")
+
+    def test_auto_reactions_use_normalized_body_intents(self) -> None:
+        body_press = auto_reactions_for_message({"event": "body_input", "input": "touch", "action": "press"})
+        pressure_press = auto_reactions_for_message({"event": "pressure", "action": "press"})
+        self.assertEqual(body_press, pressure_press)
+        self.assertEqual(body_press[0].key, "pressure_press")
+        self.assertEqual(body_press[0].payload, {"action": "presence", "state": "listening", "emotion": "happy"})
+
+        button_b = auto_reactions_for_message({"event": "body_input", "input": "button", "source": "B", "action": "press"})
+        legacy_button_b = auto_reactions_for_message({"event": "button", "pin": "B", "action": "press"})
+        self.assertEqual(button_b, legacy_button_b)
+        self.assertEqual(button_b[0].payload, {"action": "presence", "state": "online_idle", "emotion": "normal"})
 
     def test_runtime_config_loads_from_json(self) -> None:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as fh:

@@ -152,6 +152,16 @@ esp_err_t led_init(void)
     return ESP_OK;
 }
 
+bool led_gpio_is_available(void)
+{
+    return s_channel != NULL && s_encoder != NULL;
+}
+
+bool led_is_available(void)
+{
+    return led_gpio_is_available() || py32_led_is_available();
+}
+
 led_write_result_t led_set_color(uint8_t r, uint8_t g, uint8_t b)
 {
     xSemaphoreTake(s_lock, portMAX_DELAY);

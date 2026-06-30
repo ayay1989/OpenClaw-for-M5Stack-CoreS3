@@ -19,6 +19,9 @@
 
 esp_err_t servo_init(void);
 bool servo_is_available(void);
+bool servo_vm_powered(void);
+bool servo_ping_ok(void);
+bool servo_position_write_ok(void);
 esp_err_t servo_enable(bool enable);
 esp_err_t servo_center(void);
 esp_err_t servo_move_to(int yaw_deg, int pitch_deg, uint32_t duration_ms);

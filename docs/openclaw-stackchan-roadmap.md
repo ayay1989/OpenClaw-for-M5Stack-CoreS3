@@ -24,15 +24,42 @@ CoreS3/StackChan owns:
 
 The device must not persist long-term OpenClaw memory.
 
+## Current Project Status
+
+Status: repository-ready, hardware-diagnostics repair pass implemented, pending ESP-IDF build and CoreS3 hardware validation.
+
+Authoritative progress view:
+- This roadmap is the single project-level progress view.
+- `docs/hardware-validation-log.md` records hardware evidence only.
+- `docs/release-readiness-checklist.md` records release gates only.
+- `docs/pre-residency-engineering-plan.md` records engineering split references only.
+
+Current governance baseline:
+- `AGENTS.md` defines fail-fast, sub-agent, reviewer, drift-audit, and QA rules.
+- Windows Bridge auto-reactions are centralized in `windows_bridge/openclaw_bridge/auto_reactions.py`.
+- Firmware local visual feedback has been separated from the protocol parser through `main/visuals.c`.
+- Firmware self-test has been separated from the protocol parser through `main/selftest.c`.
+- Firmware body input events have been separated from the protocol parser through `main/body_events.c`.
+- Shared LED/motion/audio diagnostics live in `main/diagnostics.c`.
+- `main/protocol.c` remains the main command parser and transport-facing protocol module.
+
+Current hardware diagnosis:
+- HtSz functional extraction and failure analysis lives in `docs/hardware-porting/htsz-functional-extract-and-failure-analysis.md`.
+- User-side feedback indicates network/session can come up, but LED ring, servo motion, body-touch input, and speaker output are not yet reliable on real hardware.
+- Firmware now separates PY32, PY32 LED, servo VM_EN, servo ping, servo write, SI12T body touch, motion, and audio diagnostics in hello/heartbeat/self-test/status outputs.
+- Motion/servo capability is reported true only after verified servo detection; VM_EN-only state remains diagnostic.
+- SI12T head/body touch has a pure-C optional driver; it reports available only after the 12-second calibration and first state read succeed, and still requires true CoreS3 validation.
+
 ## Milestone 1: Body Contract
 
-Status: repository-ready, pending hardware validation.
+Status: repository-ready, second governance hardening pass complete, pending hardware validation.
 
 Firmware side:
 - Stable TCP/serial JSON protocol.
 - Hello, heartbeat, and runtime feature discovery.
 - Emotions, LED, buttons, touch, gestures.
 - Touch-derived pressure events: `press`, `hold`, `release`.
+- Optional SI12T head/body touch events through `source=head_si12t`.
 - Optional motion with graceful fallback.
 - GPL-3.0 licensing and Chinese README.
 
@@ -47,6 +74,7 @@ Windows Bridge side:
 
 Acceptance:
 - Touching the robot produces both `touch` and `pressure` events in Windows logs.
+- If SI12T is present, touching the head/body produces `body_input` and `pressure` with `source=head_si12t`.
 - Missing motion/audio hardware does not break the session.
 - OpenClaw can set face, light, presence, and head motion through one bridge API.
 - Without hardware, the fake CoreS3 device can exercise hello, heartbeat, pressure, and command delivery.
@@ -127,3 +155,10 @@ Acceptance:
 - A new user can configure WiFi/TCP from `menuconfig`.
 - `idf.py set-target esp32s3 && idf.py build` passes in ESP-IDF v5.x.
 - README states GPL-3.0 clearly.
+
+## Change Log
+
+- 2026-06-30: Implemented hardware-diagnostics repair pass: PY32 pre-wait, layered PY32/LED/servo diagnostics, optional SI12T head/body touch driver, and updated protocol docs.
+- 2026-06-30: Added HtSz functional extraction and current failure analysis after hardware feedback showed body-output issues still remain.
+- 2026-06-26: Set this roadmap as the single project-level progress view; recorded completed first governance pass for Agent rules, Bridge auto-reaction centralization, and firmware visual-service extraction.
+- 2026-06-26: Completed second governance pass by extracting firmware self-test, body-event handling, and shared diagnostics from `main/protocol.c`.

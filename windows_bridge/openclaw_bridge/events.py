@@ -31,7 +31,7 @@ def intent_from_event(event: dict[str, Any]) -> BodyIntent | None:
         if input_kind == "touch":
             if action in {"press", "contact"}:
                 return BodyIntent("body_input", "contact_started", "User touched StackChan.", priority=2)
-            if action == "hold":
+            if action in {"hold", "pet"}:
                 return BodyIntent("body_input", "comfort_contact", "User is holding or petting StackChan.", priority=3)
             if action == "release":
                 return BodyIntent("body_input", "contact_ended", "User stopped touching StackChan.", priority=1)
@@ -62,7 +62,7 @@ def intent_from_event(event: dict[str, Any]) -> BodyIntent | None:
         action = str(message.get("action") or "")
         if action == "press":
             return BodyIntent("tactile", "contact_started", "User touched StackChan.", priority=2)
-        if action == "hold":
+        if action in {"hold", "pet"}:
             return BodyIntent("tactile", "comfort_contact", "User is holding or petting StackChan.", priority=3)
         if action == "release":
             return BodyIntent("tactile", "contact_ended", "User stopped touching StackChan.", priority=1)

@@ -5,34 +5,30 @@
 #include <stdlib.h>
 #include <string.h>
 #include "cJSON.h"
-#include "driver/gpio.h"
+#include "diagnostics.h"
 #include "esp_err.h"
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
 #include "audiodriver.h"
+#include "body_events.h"
 #include "body_service.h"
 #include "emotions.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/task.h"
-#include "lcddriver.h"
 #include "leddriver.h"
 #include "mbedtls/base64.h"
 #include "presence.h"
+#include "selftest.h"
+#include "visuals.h"
 
 static const char *TAG = "protocol";
 static const char *FIRMWARE_VERSION = "1.0.0";
 static protocol_send_fn_t s_sender;
 static void *s_sender_ctx;
-static bool s_tactile_available;
-
-typedef struct {
-    presence_state_t state;
-    char emotion[16];
-    bool mouth_open;
-} visual_update_t;
+static bool s_touchscreen_available;
+static bool s_body_touch_available;
 
 typedef struct {
     bool active;
@@ -41,9 +37,7 @@ typedef struct {
     int channels;
 } audio_stream_state_t;
 
-static QueueHandle_t s_visual_queue;
 static audio_stream_state_t s_audio_stream;
-static bool s_self_test_running;
 
 static void send_json(cJSON *root)
 {
@@ -88,48 +82,6 @@ static int json_int_or_default(cJSON *root, const char *name, int fallback)
 static bool json_rgb_args_valid(int r, int g, int b)
 {
     return r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255;
-}
-
-static const char *motion_error_message(esp_err_t err)
-{
-    if (err == ESP_ERR_NOT_FOUND) {
-        return "motion unavailable";
-    }
-    if (err == ESP_ERR_TIMEOUT) {
-        return "motion busy";
-    }
-    if (err == ESP_ERR_INVALID_ARG) {
-        return "invalid motion";
-    }
-    if (err == ESP_ERR_INVALID_STATE) {
-        return "motion not initialized";
-    }
-    return esp_err_to_name(err);
-}
-
-static const char *audio_error_message(esp_err_t err)
-{
-    if (err == ESP_ERR_NOT_SUPPORTED) {
-        return "audio unavailable";
-    }
-    if (err == ESP_ERR_INVALID_ARG) {
-        return "invalid audio";
-    }
-    if (err == ESP_ERR_TIMEOUT) {
-        return "audio busy";
-    }
-    return esp_err_to_name(err);
-}
-
-static void add_led_write_result(cJSON *root, const led_write_result_t *result)
-{
-    if (root == NULL || result == NULL) {
-        return;
-    }
-    cJSON_AddBoolToObject(root, "led", result->led_gpio_write_ok || result->py32_led_write_ok);
-    cJSON_AddBoolToObject(root, "led_gpio_write_ok", result->led_gpio_write_ok);
-    cJSON_AddBoolToObject(root, "py32_led_write_ok", result->py32_led_write_ok);
-    cJSON_AddBoolToObject(root, "py32_led_available", result->py32_led_available);
 }
 
 static void copy_small(char *dst, size_t dst_len, const char *src)
@@ -248,177 +200,13 @@ static void handle_audio_stream(cJSON *root, const char *action)
     if (err == ESP_OK) {
         send_ok(action, "chunk");
     } else {
-        send_error(action, audio_error_message(err));
+        send_error(action, diagnostics_audio_error_message(err));
     }
-}
-
-static void apply_presence_visuals_now(presence_state_t state, const char *emotion, bool mouth_open)
-{
-    const char *draw_emotion = emotion != NULL ? emotion : presence_default_emotion(state);
-    uint8_t r = 0;
-    uint8_t g = 0;
-    uint8_t b = 0;
-    uint8_t speed = 1;
-    presence_default_led(state, &r, &g, &b, &speed);
-    emotion_draw_presence(draw_emotion, mouth_open || state == PRESENCE_SPEAKING, 0, 0);
-    led_set_breath(r, g, b, speed);
-    body_apply_presence(state);
-}
-
-static void visual_task(void *arg)
-{
-    (void)arg;
-    visual_update_t update;
-    while (true) {
-        if (xQueueReceive(s_visual_queue, &update, portMAX_DELAY) == pdTRUE) {
-            const char *emotion = update.emotion[0] != '\0' ? update.emotion : NULL;
-            apply_presence_visuals_now(update.state, emotion, update.mouth_open);
-        }
-    }
-}
-
-static void apply_presence_visuals(presence_state_t state, const char *emotion, bool mouth_open)
-{
-    if (s_visual_queue == NULL) {
-        apply_presence_visuals_now(state, emotion, mouth_open);
-        return;
-    }
-    visual_update_t update = {
-        .state = state,
-        .mouth_open = mouth_open,
-    };
-    copy_small(update.emotion, sizeof(update.emotion), emotion);
-    xQueueOverwrite(s_visual_queue, &update);
-}
-
-static void self_test_task(void *arg)
-{
-    (void)arg;
-    ESP_LOGI(TAG, "body self-test started");
-    led_write_result_t led_probe = {0};
-
-    apply_presence_visuals_now(PRESENCE_LISTENING, "surprised", false);
-    led_probe = led_set_color(255, 0, 0);
-    bool led_gpio_write_ok = led_probe.led_gpio_write_ok;
-    bool py32_led_write_ok = led_probe.py32_led_write_ok;
-    bool py32_led_available = led_probe.py32_led_available;
-    vTaskDelay(pdMS_TO_TICKS(700));
-
-    apply_presence_visuals_now(PRESENCE_SPEAKING, "love", true);
-    led_probe = led_set_color(0, 255, 0);
-    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
-    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
-    py32_led_available = led_probe.py32_led_available;
-    vTaskDelay(pdMS_TO_TICKS(700));
-
-    apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
-    led_probe = led_set_color(0, 0, 255);
-    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
-    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
-    py32_led_available = led_probe.py32_led_available;
-    vTaskDelay(pdMS_TO_TICKS(700));
-
-    esp_err_t motion_err = body_motion_available() ? body_motion_gesture("nod") : ESP_ERR_NOT_FOUND;
-    esp_err_t audio_err = audio_is_available() ? audio_beep(880, 180, 45) : ESP_ERR_NOT_SUPPORTED;
-    led_probe = led_set_breath(0, 100, 255, 3);
-    led_gpio_write_ok = led_gpio_write_ok || led_probe.led_gpio_write_ok;
-    py32_led_write_ok = py32_led_write_ok || led_probe.py32_led_write_ok;
-    py32_led_available = led_probe.py32_led_available;
-    presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
-    apply_presence_visuals_now(PRESENCE_ONLINE_IDLE, "happy", false);
-
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "self_test");
-    cJSON_AddBoolToObject(root, "display", true);
-    led_write_result_t led_result = {
-        .led_gpio_write_ok = led_gpio_write_ok,
-        .py32_led_write_ok = py32_led_write_ok,
-        .py32_led_available = py32_led_available,
-    };
-    add_led_write_result(root, &led_result);
-    cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
-    cJSON_AddStringToObject(root, "motion_result", motion_err == ESP_OK ? "ok" : motion_error_message(motion_err));
-    cJSON_AddBoolToObject(root, "audio_out_available", audio_is_available());
-    cJSON_AddStringToObject(root, "audio_result", audio_err == ESP_OK ? "ok" : audio_error_message(audio_err));
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-
-    ESP_LOGI(TAG, "body self-test finished, motion=%s audio=%s",
-             motion_err == ESP_OK ? "ok" : motion_error_message(motion_err),
-             audio_err == ESP_OK ? "ok" : audio_error_message(audio_err));
-    s_self_test_running = false;
-    vTaskDelete(NULL);
 }
 
 esp_err_t protocol_start_self_test(void)
 {
-    if (s_self_test_running) {
-        return ESP_ERR_INVALID_STATE;
-    }
-    s_self_test_running = true;
-    if (xTaskCreate(self_test_task, "self_test", 4096, NULL, 4, NULL) != pdPASS) {
-        s_self_test_running = false;
-        return ESP_ERR_NO_MEM;
-    }
-    return ESP_OK;
-}
-
-static const char *gesture_intent(const char *gesture)
-{
-    if (gesture == NULL) {
-        return "touch";
-    }
-    if (strcmp(gesture, "double_tap") == 0) {
-        return "summon";
-    }
-    if (strcmp(gesture, "long_press") == 0) {
-        return "sleep_toggle";
-    }
-    if (strncmp(gesture, "swipe_", 6) == 0) {
-        return "browse_mood";
-    }
-    return "touch";
-}
-
-static const char *button_intent(const char *pin, const char *action)
-{
-    if (pin == NULL || action == NULL || strcmp(action, "press") != 0) {
-        return "button";
-    }
-    if (strcmp(pin, "A") == 0) {
-        return "wake";
-    }
-    if (strcmp(pin, "B") == 0) {
-        return "interrupt";
-    }
-    if (strcmp(pin, "C") == 0) {
-        return "safe_action";
-    }
-    return "button";
-}
-
-static void apply_local_intent(const char *intent)
-{
-    if (intent == NULL) {
-        return;
-    }
-    if (strcmp(intent, "summon") == 0 || strcmp(intent, "wake") == 0) {
-        presence_set_state(PRESENCE_LISTENING, NULL);
-        apply_presence_visuals(PRESENCE_LISTENING, NULL, false);
-    } else if (strcmp(intent, "interrupt") == 0) {
-        presence_set_state(PRESENCE_ONLINE_IDLE, "normal");
-        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "normal", false);
-    } else if (strcmp(intent, "sleep_toggle") == 0) {
-        presence_snapshot_t snapshot;
-        presence_get_snapshot(&snapshot);
-        presence_state_t next = snapshot.presence == PRESENCE_SLEEPING ? PRESENCE_ONLINE_IDLE : PRESENCE_SLEEPING;
-        presence_set_state(next, NULL);
-        apply_presence_visuals(next, NULL, false);
-    } else if (strcmp(intent, "touch") == 0) {
-        presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
-        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
-    }
+    return selftest_start(send_json);
 }
 
 static void mcp_add_id(cJSON *payload, cJSON *id)
@@ -488,7 +276,7 @@ static cJSON *mcp_led_result(const led_write_result_t *led_result)
     bool ok = led_result != NULL && (led_result->led_gpio_write_ok || led_result->py32_led_write_ok);
     cJSON *result = mcp_tool_text_result(ok ? "ok" : "no led write");
     cJSON_ReplaceItemInObject(result, "isError", cJSON_CreateBool(!ok));
-    add_led_write_result(result, led_result);
+    diagnostics_add_led_write_result(result, led_result);
     return result;
 }
 
@@ -630,8 +418,8 @@ static void mcp_handle_tools_list(cJSON *id)
     mcp_add_tool(tools, "self.device.get_status", "Read uptime and WiFi RSSI.", mcp_tool_schema_object());
     mcp_add_tool(tools, "self.emotion.set", "Set the fullscreen Stackchan-style face emotion.", mcp_schema_emotion_set());
     mcp_add_tool(tools, "self.presence.set", "Set the OpenClaw resident presence state.", mcp_schema_presence_set());
-    mcp_add_tool(tools, "self.led.set_color", "Set the external SK6812/NeoPixel color.", mcp_schema_rgb(false));
-    mcp_add_tool(tools, "self.led.breath", "Set the external SK6812/NeoPixel breathing effect.", mcp_schema_rgb(true));
+    mcp_add_tool(tools, "self.led.set_color", "Set the StackChan LED ring or external SK6812/NeoPixel color.", mcp_schema_rgb(false));
+    mcp_add_tool(tools, "self.led.breath", "Set the StackChan LED ring or external SK6812/NeoPixel breathing effect.", mcp_schema_rgb(true));
     if (body_motion_available()) {
         mcp_add_tool(tools, "self.motion.look_at", "Move Stackchan head to yaw/pitch angles.", mcp_schema_motion_look_at());
         mcp_add_tool(tools, "self.motion.center", "Move Stackchan head to the safe center position.", mcp_tool_schema_object());
@@ -670,16 +458,25 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         }
         presence_snapshot_t snapshot;
         presence_get_snapshot(&snapshot);
-        char status[256];
-        snprintf(status, sizeof(status),
-                 "{\"uptime\":%lld,\"wifi_rssi\":%d,\"presence_state\":\"%s\",\"connection_state\":\"%s\",\"emotion\":\"%s\",\"motion_available\":%s,\"audio_out_available\":%s}",
-                 esp_timer_get_time() / 1000000LL, rssi,
-                 presence_state_to_string(snapshot.presence),
-                 presence_connection_to_string(snapshot.connection),
-                 snapshot.emotion,
-                 body_motion_available() ? "true" : "false",
-                 audio_is_available() ? "true" : "false");
-        mcp_send_result(id, mcp_tool_text_result(status));
+        cJSON *status_json = cJSON_CreateObject();
+        if (status_json == NULL) {
+            mcp_send_error(id, -32000, "no memory for status");
+        } else {
+            cJSON_AddNumberToObject(status_json, "uptime", esp_timer_get_time() / 1000000LL);
+            cJSON_AddNumberToObject(status_json, "wifi_rssi", rssi);
+            cJSON_AddStringToObject(status_json, "presence_state", presence_state_to_string(snapshot.presence));
+            cJSON_AddStringToObject(status_json, "connection_state", presence_connection_to_string(snapshot.connection));
+            cJSON_AddStringToObject(status_json, "emotion", snapshot.emotion);
+            diagnostics_add_hardware_status(status_json);
+            char *status = cJSON_PrintUnformatted(status_json);
+            if (status == NULL) {
+                mcp_send_error(id, -32000, "no memory for status text");
+            } else {
+                mcp_send_result(id, mcp_tool_text_result(status));
+                cJSON_free(status);
+            }
+            cJSON_Delete(status_json);
+        }
     } else if (strcmp(name, "self.emotion.set") == 0) {
         cJSON *value_json = cJSON_GetObjectItem(args, "value");
         if (!cJSON_IsString(value_json)) {
@@ -707,7 +504,7 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
             mcp_send_error(id, -32602, "Unknown emotion");
         } else {
             presence_set_state(state, emotion);
-            apply_presence_visuals(state, emotion, false);
+            visuals_apply(state, emotion, false);
             mcp_send_result(id, mcp_tool_text_result(presence_state_to_string(state)));
         }
     } else if (strcmp(name, "self.led.set_color") == 0) {
@@ -742,7 +539,7 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
             if (err == ESP_OK) {
                 mcp_send_result(id, mcp_tool_text_result("queued"));
             } else {
-                mcp_send_error(id, -32000, motion_error_message(err));
+                mcp_send_error(id, -32000, diagnostics_motion_error_message(err));
             }
         }
     } else if (strcmp(name, "self.motion.center") == 0 || strcmp(name, "self.motion.nod") == 0 ||
@@ -753,7 +550,7 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
         if (err == ESP_OK) {
             mcp_send_result(id, mcp_tool_text_result("queued"));
         } else {
-            mcp_send_error(id, -32000, motion_error_message(err));
+            mcp_send_error(id, -32000, diagnostics_motion_error_message(err));
         }
     } else if (strcmp(name, "self.audio.beep") == 0) {
         int frequency = json_int_or_default(args, "frequency_hz", json_int_or_default(args, "freq", 880));
@@ -766,7 +563,7 @@ static void mcp_handle_tool_call(cJSON *id, cJSON *params)
             if (err == ESP_OK) {
                 mcp_send_result(id, mcp_tool_text_result("ok"));
             } else {
-                mcp_send_error(id, -32000, audio_error_message(err));
+                mcp_send_error(id, -32000, diagnostics_audio_error_message(err));
             }
         }
     } else {
@@ -862,7 +659,7 @@ static bool protocol_handle_envelope(cJSON *root, const char *source)
             presence_get_snapshot(&snapshot);
             if (snapshot.presence == PRESENCE_CONNECTING || snapshot.presence == PRESENCE_BOOTING) {
                 presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
-                apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
+                visuals_apply(PRESENCE_ONLINE_IDLE, "happy", false);
             }
             ready = true;
         }
@@ -903,7 +700,7 @@ static bool protocol_handle_envelope(cJSON *root, const char *source)
                 presence_set_session(session_json->valuestring);
             }
             presence_set_state(state, emotion);
-            apply_presence_visuals(state, emotion, mouth_open);
+            visuals_apply(state, emotion, mouth_open);
             send_ok("presence", presence_state_to_string(state));
         }
         return true;
@@ -916,15 +713,10 @@ void protocol_init(protocol_send_fn_t sender, void *sender_ctx)
 {
     s_sender = sender;
     s_sender_ctx = sender_ctx;
-    if (s_visual_queue == NULL) {
-        s_visual_queue = xQueueCreate(1, sizeof(visual_update_t));
-        if (s_visual_queue != NULL) {
-            if (xTaskCreate(visual_task, "visual_task", 4096, NULL, 5, NULL) != pdPASS) {
-                vQueueDelete(s_visual_queue);
-                s_visual_queue = NULL;
-                ESP_LOGW(TAG, "visual_task create failed; falling back to sync drawing");
-            }
-        }
+    body_events_init(send_json);
+    esp_err_t err = visuals_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "visual service init failed; using sync drawing fallback: %s", esp_err_to_name(err));
     }
 }
 
@@ -985,7 +777,7 @@ void protocol_handle_line(const char *line, const char *source)
             send_error(action, "unknown emotion");
         } else {
             presence_set_state(state, emotion);
-            apply_presence_visuals(state, emotion, mouth_open);
+            visuals_apply(state, emotion, mouth_open);
             send_ok(action, presence_state_to_string(state));
         }
     } else if (strcmp(action, "sleep") == 0) {
@@ -993,7 +785,7 @@ void protocol_handle_line(const char *line, const char *source)
         bool enabled = enabled_json == NULL || cJSON_IsTrue(enabled_json);
         presence_state_t state = enabled ? PRESENCE_SLEEPING : PRESENCE_ONLINE_IDLE;
         presence_set_state(state, NULL);
-        apply_presence_visuals(state, NULL, false);
+        visuals_apply(state, NULL, false);
         send_ok(action, presence_state_to_string(state));
     } else if (strcmp(action, "memory_cue") == 0) {
         cJSON *emotion_json = cJSON_GetObjectItem(root, "emotion");
@@ -1005,7 +797,7 @@ void protocol_handle_line(const char *line, const char *source)
             uint32_t ttl_ms = cJSON_IsNumber(ttl_json) && ttl_json->valueint > 0 ? (uint32_t)ttl_json->valueint : 3000U;
             presence_set_memory_context(true, ttl_ms);
             presence_set_state(PRESENCE_SPEAKING, emotion);
-            apply_presence_visuals(PRESENCE_SPEAKING, emotion, true);
+            visuals_apply(PRESENCE_SPEAKING, emotion, true);
             send_ok(action, emotion);
         }
     } else if (strcmp(action, "self_test") == 0) {
@@ -1032,7 +824,7 @@ void protocol_handle_line(const char *line, const char *source)
             if (!led_ok) {
                 cJSON_AddStringToObject(reply, "message", "no led write");
             }
-            add_led_write_result(reply, &result);
+            diagnostics_add_led_write_result(reply, &result);
             send_json(reply);
             cJSON_Delete(reply);
         }
@@ -1058,7 +850,7 @@ void protocol_handle_line(const char *line, const char *source)
             if (!led_ok) {
                 cJSON_AddStringToObject(reply, "message", "no led write");
             }
-            add_led_write_result(reply, &result);
+            diagnostics_add_led_write_result(reply, &result);
             send_json(reply);
             cJSON_Delete(reply);
         }
@@ -1073,7 +865,7 @@ void protocol_handle_line(const char *line, const char *source)
             if (err == ESP_OK) {
                 send_ok(action, "queued");
             } else {
-                send_error(action, motion_error_message(err));
+                send_error(action, diagnostics_motion_error_message(err));
             }
         }
     } else if (strcmp(action, "motion") == 0) {
@@ -1085,7 +877,7 @@ void protocol_handle_line(const char *line, const char *source)
             if (err == ESP_OK) {
                 send_ok(action, gesture_json->valuestring);
             } else {
-                send_error(action, motion_error_message(err));
+                send_error(action, diagnostics_motion_error_message(err));
             }
         }
     } else if (strcmp(action, "beep") == 0) {
@@ -1099,14 +891,14 @@ void protocol_handle_line(const char *line, const char *source)
             if (err == ESP_OK) {
                 send_ok(action, "ok");
             } else {
-                send_error(action, audio_error_message(err));
+                send_error(action, diagnostics_audio_error_message(err));
             }
         }
     } else if (strcmp(action, "audio_stream") == 0) {
         handle_audio_stream(root, action);
     } else if (strcmp(action, "interrupt") == 0) {
         presence_set_state(PRESENCE_ONLINE_IDLE, "normal");
-        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "normal", false);
+        visuals_apply(PRESENCE_ONLINE_IDLE, "normal", false);
         send_ok(action, "stopped");
     } else if (strcmp(action, "ping") == 0) {
         send_ok(action, "pong");
@@ -1119,7 +911,12 @@ void protocol_handle_line(const char *line, const char *source)
 
 void protocol_set_tactile_available(bool available)
 {
-    s_tactile_available = available;
+    s_touchscreen_available = available;
+}
+
+void protocol_set_body_touch_available(bool available)
+{
+    s_body_touch_available = available;
 }
 
 void protocol_emit_hello(void)
@@ -1150,11 +947,16 @@ void protocol_emit_hello(void)
     cJSON_AddBoolToObject(features, "mcp", true);
     cJSON_AddBoolToObject(features, "emotion", true);
     cJSON_AddBoolToObject(features, "led", true);
-    cJSON_AddBoolToObject(features, "touch", s_tactile_available);
-    cJSON_AddBoolToObject(features, "gesture", s_tactile_available);
-    cJSON_AddBoolToObject(features, "pressure", s_tactile_available);
-    cJSON_AddBoolToObject(features, "body_input", s_tactile_available);
-    cJSON_AddBoolToObject(features, "tactile", s_tactile_available);
+    bool tactile_available = s_touchscreen_available || s_body_touch_available;
+    cJSON_AddBoolToObject(features, "touch", s_touchscreen_available);
+    cJSON_AddBoolToObject(features, "touchscreen", s_touchscreen_available);
+    cJSON_AddBoolToObject(features, "gesture", s_touchscreen_available);
+    cJSON_AddBoolToObject(features, "pressure", tactile_available);
+    cJSON_AddBoolToObject(features, "body_input", tactile_available);
+    cJSON_AddBoolToObject(features, "tactile", tactile_available);
+    cJSON_AddBoolToObject(features, "body_touch", s_body_touch_available);
+    cJSON_AddBoolToObject(features, "head_touch", s_body_touch_available);
+    cJSON_AddBoolToObject(features, "si12t", s_body_touch_available);
     cJSON_AddBoolToObject(features, "presence", true);
     cJSON_AddBoolToObject(features, "memory_context", true);
     cJSON_AddBoolToObject(features, "motion", body_motion_available());
@@ -1195,6 +997,7 @@ void protocol_emit_hello(void)
         cJSON_AddStringToObject(root, "session_id", snapshot.session_id);
     }
     presence_add_json(root);
+    diagnostics_add_hardware_status(root);
     if (audio_is_available()) {
         cJSON *audio_params = cJSON_CreateObject();
         cJSON_AddNumberToObject(audio_params, "sample_rate", CORES3_AUDIO_SAMPLE_RATE);
@@ -1214,109 +1017,6 @@ void protocol_emit_hello(void)
     cJSON_Delete(root);
 }
 
-void protocol_emit_button(const char *pin, const char *action)
-{
-    const char *intent = button_intent(pin, action);
-    apply_local_intent(intent);
-    protocol_emit_body_input("button", action, pin, -1, -1, action != NULL && strcmp(action, "press") == 0 ? 100 : 0, intent);
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "button");
-    cJSON_AddStringToObject(root, "pin", pin);
-    cJSON_AddStringToObject(root, "action", action);
-    cJSON_AddStringToObject(root, "intent", intent);
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-}
-
-void protocol_emit_body_input(const char *input, const char *action, const char *source,
-                              int x, int y, int intensity, const char *intent)
-{
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "body_input");
-    cJSON_AddStringToObject(root, "input", input != NULL ? input : "unknown");
-    cJSON_AddStringToObject(root, "action", action != NULL ? action : "unknown");
-    if (source != NULL && source[0] != '\0') {
-        cJSON_AddStringToObject(root, "source", source);
-    }
-    if (x >= 0 && y >= 0) {
-        cJSON_AddNumberToObject(root, "x", x);
-        cJSON_AddNumberToObject(root, "y", y);
-    }
-    if (intensity >= 0) {
-        cJSON_AddNumberToObject(root, "intensity", intensity);
-    }
-    if (intent != NULL && intent[0] != '\0') {
-        cJSON_AddStringToObject(root, "intent", intent);
-    }
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-}
-
-void protocol_emit_touch(int x, int y)
-{
-    protocol_emit_body_input("touch", "contact", "touchscreen", x, y, 30, "attention");
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "touch");
-    cJSON_AddNumberToObject(root, "x", x);
-    cJSON_AddNumberToObject(root, "y", y);
-    cJSON_AddStringToObject(root, "intent", "attention");
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-}
-
-static void apply_pressure_feedback(const char *action)
-{
-    if (action != NULL && strcmp(action, "press") == 0) {
-        presence_set_state(PRESENCE_LISTENING, "happy");
-        apply_presence_visuals(PRESENCE_LISTENING, "happy", false);
-    } else if (action != NULL && strcmp(action, "hold") == 0) {
-        presence_set_state(PRESENCE_SPEAKING, "love");
-        apply_presence_visuals(PRESENCE_SPEAKING, "love", true);
-    } else if (action != NULL && strcmp(action, "release") == 0) {
-        presence_set_state(PRESENCE_ONLINE_IDLE, "happy");
-        apply_presence_visuals(PRESENCE_ONLINE_IDLE, "happy", false);
-    }
-}
-
-void protocol_emit_pressure(const char *action, int x, int y, int intensity)
-{
-    apply_pressure_feedback(action);
-    protocol_emit_body_input("touch", action, "touchscreen", x, y, intensity, "tactile_contact");
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "pressure");
-    cJSON_AddStringToObject(root, "source", "touchscreen");
-    cJSON_AddStringToObject(root, "action", action);
-    cJSON_AddNumberToObject(root, "x", x);
-    cJSON_AddNumberToObject(root, "y", y);
-    cJSON_AddNumberToObject(root, "intensity", intensity);
-    cJSON_AddStringToObject(root, "intent", "tactile_contact");
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-}
-
-void protocol_emit_gesture(const char *gesture, int x, int y)
-{
-    const char *intent = gesture_intent(gesture);
-    apply_local_intent(intent);
-    body_apply_touch_gesture(gesture);
-    protocol_emit_body_input("gesture", gesture, "touchscreen", x, y, 60, intent);
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddStringToObject(root, "event", "gesture");
-    cJSON_AddStringToObject(root, "gesture", gesture);
-    cJSON_AddStringToObject(root, "intent", intent);
-    if (x >= 0 && y >= 0) {
-        cJSON_AddNumberToObject(root, "x", x);
-        cJSON_AddNumberToObject(root, "y", y);
-    }
-    presence_add_json(root);
-    send_json(root);
-    cJSON_Delete(root);
-}
-
 void protocol_emit_heartbeat(void)
 {
     wifi_ap_record_t ap = {0};
@@ -1326,11 +1026,14 @@ void protocol_emit_heartbeat(void)
     }
 
     cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        ESP_LOGW(TAG, "heartbeat allocation failed");
+        return;
+    }
     cJSON_AddStringToObject(root, "event", "heartbeat");
     cJSON_AddNumberToObject(root, "uptime", esp_timer_get_time() / 1000000LL);
     cJSON_AddNumberToObject(root, "wifi_rssi", rssi);
-    cJSON_AddBoolToObject(root, "motion_available", body_motion_available());
-    cJSON_AddBoolToObject(root, "audio_out_available", audio_is_available());
+    diagnostics_add_hardware_status(root);
     presence_add_json(root);
     send_json(root);
     cJSON_Delete(root);

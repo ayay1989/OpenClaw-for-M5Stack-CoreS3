@@ -40,10 +40,14 @@ Important fields:
     "emotion": true,
     "led": true,
     "touch": true,
+    "touchscreen": true,
     "gesture": true,
     "pressure": true,
     "body_input": true,
     "tactile": true,
+    "body_touch": false,
+    "head_touch": false,
+    "si12t": false,
     "presence": true,
     "memory_context": true,
     "motion": false,
@@ -58,13 +62,24 @@ Important fields:
     "ota": false,
     "multi_device": false
   },
+  "py32_available": true,
+  "py32_led_available": true,
+  "servo_vm_en_ok": true,
+  "servo_ping_ok": false,
+  "servo_write_ok": false,
+  "si12t_available": false,
+  "body_touch_available": false,
+  "motion_available": false,
+  "audio_out_available": false,
   "audio_params": null
 }
 ```
 
-`touch`, `gesture`, `pressure`, `tactile`, `motion`, `servo`, and `audio_out` are runtime capability flags. They are true only when the related subsystem initialized successfully.
+`touch`, `touchscreen`, `gesture`, `pressure`, `tactile`, `body_touch`, `head_touch`, `si12t`, `motion`, `servo`, and `audio_out` are runtime capability flags. They are true only when the related subsystem initialized successfully.
 
-`pressure` is the stable tactile/contact event family, not a promise that every build has a physical pressure pad. In v1 it is derived from touch contact. Future shell touch, FSR pressure pads, IMU shake/pickup, or other body sensors should keep the same high-level body event semantics where possible.
+`pressure` is the stable tactile/contact event family, not a promise that every build has a physical pressure pad. In v1 it can come from FT6336 screen contact or optional SI12T head/body touch. Future shell touch, FSR pressure pads, IMU shake/pickup, or other body sensors should keep the same high-level body event semantics where possible.
+
+Hardware diagnostic fields such as `py32_available`, `py32_led_available`, `servo_vm_en_ok`, `servo_ping_ok`, `servo_write_ok`, `si12t_available`, and `body_touch_available` are intentionally separate from broad features. They help distinguish "the session is online" from "the body hardware is physically responding".
 
 If `audio_out` is true, `audio_params` is:
 
@@ -95,6 +110,7 @@ Audio is disabled by default. When `CONFIG_OPENCLAW_AUDIO_ENABLE=y` and I2S init
 | presence fields | mixed | yes | Presence state, connection state, emotion, memory flags | yes |
 | `audio_params` | object or null | yes | Audio format only when `audio_out=true` | yes |
 | `emotions` | array | yes | Supported face names | yes |
+| hardware diagnostic fields | boolean | no | PY32, LED ring, servo, SI12T, audio status | yes |
 
 ## OpenClaw Context
 
@@ -224,7 +240,7 @@ Pressure/tactile contact:
 {"event":"pressure","source":"touchscreen","action":"release","x":120,"y":200,"intensity":0,"intent":"tactile_contact"}
 ```
 
-In v1, pressure is derived from the CoreS3 FT6336 touch panel so OpenClaw can react when the robot is touched. Future shell touch sensors, head/body FSR pressure sensors, or IMU-based shake/pickup detection should reuse the same body-event vocabulary where possible and set a more specific `source`, for example `head_fsr`, `body_fsr`, `shell_touch`, or `imu`.
+In v1, pressure may come from the CoreS3 FT6336 touch panel or the optional SI12T head/body touch sensor so OpenClaw can react when the robot is touched. Future shell touch sensors, head/body FSR pressure sensors, or IMU-based shake/pickup detection should reuse the same body-event vocabulary where possible and set a more specific `source`, for example `head_si12t`, `head_fsr`, `body_fsr`, `shell_touch`, or `imu`.
 
 Gesture:
 
@@ -257,10 +273,10 @@ Bridge or OpenClaw can send:
 CoreS3 responds immediately with `{"status":"ok","action":"self_test","value":"started"}` and then runs a short body self-test: face changes, LED red/green/blue sequence, optional motion nod, optional beep. When finished it emits:
 
 ```json
-{"event":"self_test","display":true,"led":true,"motion_available":false,"motion_result":"motion unavailable","audio_out_available":false,"audio_result":"audio unavailable"}
+{"event":"self_test","display":true,"led":true,"led_gpio_write_ok":true,"py32_led_write_ok":false,"py32_led_available":false,"motion_available":false,"motion_result":"motion unavailable","audio_out_available":false,"audio_result":"audio unavailable"}
 ```
 
-Use this event to separate protocol readiness from physical hardware readiness.
+Use this event to separate protocol readiness from physical hardware readiness. `led` is true only when at least one LED backend reports a successful write; `led_gpio_write_ok`, `py32_led_write_ok`, and `py32_led_available` expose the backend-specific diagnostics.
 
 ### Heartbeat Field Stability
 

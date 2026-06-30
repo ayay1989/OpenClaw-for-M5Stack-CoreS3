@@ -20,6 +20,9 @@ static const char *TAG = "servo";
 
 static bool s_initialized;
 static bool s_available;
+static bool s_vm_powered;
+static bool s_ping_ok;
+static bool s_position_write_ok;
 static int s_yaw_deg = SERVO_YAW_CENTER_DEG;
 static int s_pitch_deg = SERVO_PITCH_CENTER_DEG;
 
@@ -61,6 +64,7 @@ static esp_err_t move_checked(int yaw_deg, int pitch_deg, uint32_t duration_ms)
     if (yaw_err == ESP_OK && pitch_err == ESP_OK) {
         s_yaw_deg = yaw_deg;
         s_pitch_deg = pitch_deg;
+        s_position_write_ok = true;
         return ESP_OK;
     }
 
@@ -110,6 +114,7 @@ esp_err_t servo_init(void)
     } else {
         err = py32_set_servo_power(true);
         vm_powered = err == ESP_OK;
+        s_vm_powered = vm_powered;
         if (err != ESP_OK) {
             ESP_LOGW(TAG, "servo VM_EN power enable failed, probing anyway: %s", esp_err_to_name(err));
         } else {
@@ -134,15 +139,12 @@ esp_err_t servo_init(void)
     esp_err_t yaw = detect_servo_with_retries(SERVO_YAW_ID, "yaw");
     esp_err_t pitch = detect_servo_with_retries(SERVO_PITCH_ID, "pitch");
     s_available = (yaw == ESP_OK && pitch == ESP_OK);
+    s_ping_ok = s_available;
     if (!s_available) {
         ESP_LOGW(TAG, "servos not detected, yaw=%s pitch=%s",
                  esp_err_to_name(yaw), esp_err_to_name(pitch));
-        if (vm_powered) {
-            s_available = true;
-            ESP_LOGW(TAG, "servo ping failed but VM_EN is on; enabling unverified motion path like Stackchan-HtSz");
-            ESP_ERROR_CHECK_WITHOUT_ABORT(servo_enable(true));
-            return ESP_OK;
-        }
+        ESP_LOGW(TAG, "servo VM_EN is %s, but motion remains unavailable until ping or write-position succeeds",
+                 vm_powered ? "on" : "off");
         return ESP_OK;
     }
 
@@ -159,6 +161,21 @@ esp_err_t servo_init(void)
 bool servo_is_available(void)
 {
     return s_initialized && s_available && scservo_bus_is_available();
+}
+
+bool servo_vm_powered(void)
+{
+    return s_vm_powered;
+}
+
+bool servo_ping_ok(void)
+{
+    return s_ping_ok;
+}
+
+bool servo_position_write_ok(void)
+{
+    return s_position_write_ok;
 }
 
 esp_err_t servo_enable(bool enable)

@@ -27,6 +27,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from openclaw_bridge.auto_reactions import auto_reactions_for_message
 from openclaw_bridge.edge_tts_bridge import EdgeTtsBridge
 from openclaw_bridge.memory_context import MemoryContext, load_memory_context
 from openclaw_bridge.mqtt_bus import MqttBusClient, MqttConfig
@@ -851,62 +852,8 @@ class StackChanBridge:
         print(f"[rx] {json.dumps(message, ensure_ascii=False, separators=(',', ':'))}")
 
     def _apply_auto_reaction(self, message: dict[str, Any]) -> None:
-        event = message.get("event")
-        if event == "body_input":
-            input_kind = message.get("input")
-            action = message.get("action")
-            source = message.get("source")
-            if input_kind == "touch":
-                if action in {"press", "contact"}:
-                    self._auto_send("pressure_press", 1.5, {"action": "presence", "state": "listening", "emotion": "happy"})
-                elif action == "hold":
-                    self._auto_send("pressure_hold", 3.0, {"action": "presence", "state": "speaking", "emotion": "love", "mouth": True})
-                    self._auto_send("pressure_hold_motion", 3.0, {"action": "motion", "gesture": "nod"})
-                elif action == "release":
-                    self._auto_send("pressure_release", 1.5, {"action": "presence", "state": "online_idle", "emotion": "happy"})
-            elif input_kind == "gesture":
-                if action == "double_tap":
-                    self._auto_send("gesture_double_tap", 1.5, {"action": "presence", "state": "listening", "emotion": "surprised"})
-                elif action == "long_press":
-                    self._auto_send("gesture_long_press", 2.0, {"action": "sleep", "enabled": True})
-            elif input_kind == "button" and action == "press":
-                if source == "A":
-                    self._auto_send("button_a", 1.0, {"action": "presence", "state": "listening", "emotion": "normal"})
-                elif source == "B":
-                    self._auto_send("button_b", 1.0, {"action": "presence", "state": "online_idle", "emotion": "normal"})
-                elif source == "C":
-                    self._auto_send("button_c", 1.0, {"action": "motion", "gesture": "center"})
-            elif input_kind == "motion" and action == "shake":
-                self._auto_send("body_shake", 2.0, {"action": "presence", "state": "listening", "emotion": "surprised"})
-            return
-
-        if event == "pressure":
-            action = message.get("action")
-            if action == "press":
-                self._auto_send("pressure_press", 1.5, {"action": "presence", "state": "listening", "emotion": "happy"})
-            elif action == "hold":
-                self._auto_send("pressure_hold", 3.0, {"action": "presence", "state": "speaking", "emotion": "love", "mouth": True})
-                self._auto_send("pressure_hold_motion", 3.0, {"action": "motion", "gesture": "nod"})
-            elif action == "release":
-                self._auto_send("pressure_release", 1.5, {"action": "presence", "state": "online_idle", "emotion": "happy"})
-            return
-
-        if event == "button" and message.get("action") == "press":
-            pin = message.get("pin")
-            if pin == "A":
-                self._auto_send("button_a", 1.0, {"action": "presence", "state": "listening", "emotion": "normal"})
-            elif pin == "B":
-                self._auto_send("button_b", 1.0, {"action": "presence", "state": "online_idle", "emotion": "normal"})
-            elif pin == "C":
-                self._auto_send("button_c", 1.0, {"action": "motion", "gesture": "center"})
-            return
-
-        if event == "gesture":
-            gesture = message.get("gesture")
-            if gesture == "double_tap":
-                self._auto_send("gesture_double_tap", 1.5, {"action": "presence", "state": "listening", "emotion": "surprised"})
-            elif gesture == "long_press":
-                self._auto_send("gesture_long_press", 2.0, {"action": "sleep", "enabled": True})
+        for reaction in auto_reactions_for_message(message):
+            self._auto_send(reaction.key, reaction.cooldown_s, reaction.payload)
 
     def _auto_send(self, key: str, cooldown_s: float, payload: dict[str, Any]) -> None:
         now = time.time()

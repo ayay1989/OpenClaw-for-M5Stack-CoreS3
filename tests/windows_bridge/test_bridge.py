@@ -106,6 +106,36 @@ class BridgeTest(unittest.TestCase):
         events = bridge.recent_events()
         self.assertEqual(events[-1]["kind"], "pressure")
 
+    def test_body_input_and_pressure_share_auto_reaction_cooldown(self) -> None:
+        bridge = self.make_bridge(auto_react=True)
+        bridge._handle_line(
+            json.dumps(
+                {
+                    "event": "body_input",
+                    "input": "touch",
+                    "source": "touchscreen",
+                    "action": "press",
+                    "x": 10,
+                    "y": 20,
+                    "intensity": 40,
+                }
+            )
+        )
+        bridge._handle_line(
+            json.dumps(
+                {
+                    "event": "pressure",
+                    "source": "touchscreen",
+                    "action": "press",
+                    "x": 10,
+                    "y": 20,
+                    "intensity": 40,
+                }
+            )
+        )
+        self.assertEqual(len(bridge._send_queue), 1)
+        self.assertEqual(bridge._send_queue[0], {"action": "presence", "state": "listening", "emotion": "happy"})
+
     def test_commands_wait_for_hello_before_socket_send(self) -> None:
         bridge = self.make_bridge(auto_react=False)
         left, right = socket.socketpair()
