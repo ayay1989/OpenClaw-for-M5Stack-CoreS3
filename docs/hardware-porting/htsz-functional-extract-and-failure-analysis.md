@@ -62,7 +62,7 @@ delayed init-status log
 | PMIC 电源 | `Pmic`、`InitializeAxp2101` | AXP2101 `0x34`，写 `0x90/0x99/0x97/0x69/0x30/0x94/0x95` | `main/main.c::i2c_init_internal` | 当前已引入。早期 IP5306 判断不适合作为 CoreS3 主路径。 |
 | AW9523 reset | `Aw9523`、`ResetAw88298`、`ResetIli9342` | AW9523 `0x58`；负责 AW88298 功放 reset 和 LCD reset | `main/main.c::i2c_init_internal` | 当前已引入。若音频无声，不能只查 I2S，还要确认 AW9523 reset 和 AW88298 codec 初始化。 |
 | PY32 舵机电源 | `EnableServoPowerViaPy32` | PY32 `0x6F`；每次先等 200ms，最多 10 次；读版本寄存器 `0x02`；成功后 `0x03/0x09/0x05` bit0 置 1 | `main/py32driver.c::py32_init`、`py32_set_servo_power` | 当前已补齐每次 probe 前 200ms 等待，并保留 10 次 retry；真机仍需确认 `py32_available` 是否稳定。 |
-| PY32 LED 环 | `InitializePy32LedDevice`、`Py32SetLedFrame`、`UpdateLedsFromEmotion` | 12 颗 LED；`REG_LED_CFG=0x24`；`REG_LED_RAM=0x30`；RGB565 little-endian；刷新位 `0x40` | `main/py32driver.c`、`main/leddriver.c` | 寄存器和格式已对齐。风险是当前仍保留 GPIO/RMT LED 路径，GPIO 写成功不代表真实灯环亮；验收应看 `py32_led_write_ok`。 |
+| PY32 LED 环 | `InitializePy32LedDevice`、`Py32SetLedFrame`、`UpdateLedsFromEmotion` | 12 颗 LED；`REG_LED_CFG=0x24`；`REG_LED_RAM=0x30`；RGB565 little-endian；刷新位 `0x40` | `main/py32driver.c`、`main/leddriver.c` | 寄存器和格式已对齐。启动早期配置失败后会在后续强制 LED 写入时重试；GPIO 写成功不代表真实灯环亮，验收应看 `py32_led_write_ok`。 |
 | 舵机 | `StackChanServo::Begin/MoveTo/Nod/Shake/Tilt`、`SCSCL.*` | UART1；TX/RX `GPIO6/GPIO7`；1Mbps；yaw ID 1；pitch ID 2；yaw `460 + deg*16/5`；pitch `620 + deg*16/5`；HtSz 不 ping，直接 move | `main/scservo_bus.*`、`main/servodriver.c`、`main/body_service.c` | 引脚、速率、位置映射已对齐。当前增加 ping 能真实上报可用性，但如果 ping 时序不适配，可能出现“VM_EN 已开但 motion=false”。需要记录 UART 写是否实际成功。 |
 | 空闲动作 | `IdleScanCb` | 每 4 秒扫视，yaw `-25..25`，pitch `25..35`，移动 `1500ms` | 尚无等价 idle scan | 这解释“不会转头/没有活着感”的一部分。即使舵机可用，当前也不会自动像 HtSz 那样等待扫视。 |
 | FT6336 屏幕触摸 | `Ft6336`、`InitializeFt6336TouchPad`、`PollTouchpad` | 地址 `0x38`；chip id `0xA3`；从 `0x02` 读 6 bytes；20ms 轮询；tap/double/swipe/long 参数可复用 | `main/main.c::touch_task`、`main/body_events.c` | 当前 20ms 轮询和事件形态已对齐。若用户摸的是机器人外壳/头顶，不会触发 FT6336，这是预期。 |
@@ -140,7 +140,7 @@ HtSz 音频是 codec 管线，不只是 I2S 写 PCM。当前项目默认关闭 `
 按优先级排序：
 
 1. PY32 启动窗口已补齐到每次 probe 前等待 200ms；仍需真机确认 `py32_available` 是否稳定为 true。
-2. LED 物理主路径是 PY32，不是 GPIO RMT。只看 `led_gpio_write_ok` 会误判。真机应以 `py32_led_available` 和 `py32_led_write_ok` 为准。
+2. LED 物理主路径是 PY32，不是 GPIO RMT。只看 `led_gpio_write_ok` 会误判。真机应以 `py32_led_available` 和 `py32_led_write_ok` 为准；若早期 `PY32 LED config failed`，后续强制写入应触发重新配置，且 `led_init` 不能因为 PY32 LED 尚未配置成功而阻止 LED 任务启动。
 3. 舵机 ping 判定可能比 HtSz 更严格。需要增加“VM_EN opened / UART write attempted / ping result / position write result”分层日志，而不是只看 `servo=false`。
 4. 头部/外壳触摸已有 SI12T 可选驱动，但仍需真机验证 `0x68` 是否存在、12 秒校准后是否能触发 `source=head_si12t`。
 5. 音频没有完整 codec 链。当前默认不开音频，开了也只是实验 I2S 输出。

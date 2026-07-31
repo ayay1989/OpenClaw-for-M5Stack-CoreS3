@@ -11,7 +11,10 @@ void diagnostics_add_led_write_result(cJSON *root, const led_write_result_t *res
     if (root == NULL || result == NULL) {
         return;
     }
-    cJSON_AddBoolToObject(root, "led", result->led_gpio_write_ok || result->py32_led_write_ok);
+    bool led_ok = py32_is_available()
+        ? result->py32_led_write_ok
+        : (result->led_gpio_write_ok || result->py32_led_write_ok);
+    cJSON_AddBoolToObject(root, "led", led_ok);
     cJSON_AddBoolToObject(root, "led_gpio_write_ok", result->led_gpio_write_ok);
     cJSON_AddBoolToObject(root, "py32_led_write_ok", result->py32_led_write_ok);
     cJSON_AddBoolToObject(root, "py32_led_available", result->py32_led_available);

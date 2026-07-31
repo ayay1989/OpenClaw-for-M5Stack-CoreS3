@@ -23,6 +23,7 @@ static const char *TAG = "py32";
 #define PY32_INIT_TIMEOUT_MS 200
 #define PY32_CONTROL_TIMEOUT_MS 200
 #define PY32_LED_TIMEOUT_MS 50
+#define PY32_LED_RETRY_INTERVAL_US 1000000LL
 
 static i2c_port_t s_port = I2C_NUM_MAX;
 static bool s_available;
@@ -31,6 +32,7 @@ static bool s_initialized;
 static bool s_servo_power_enabled;
 static uint8_t s_failures;
 static int64_t s_last_led_write_us;
+static int64_t s_last_led_retry_us;
 static SemaphoreHandle_t s_lock;
 
 static uint16_t rgb888_to_565(uint8_t r, uint8_t g, uint8_t b)
@@ -74,6 +76,18 @@ static esp_err_t write_reg_locked(uint8_t reg, uint8_t value)
     return write_block_locked(reg, &value, sizeof(value));
 }
 
+static esp_err_t configure_led_locked(void)
+{
+    uint8_t count = CORES3_PY32_LED_COUNT;
+    esp_err_t err = write_reg_locked(PY32_REG_LED_CFG, count);
+    if (err == ESP_OK) {
+        s_led_available = true;
+        s_failures = 0;
+        ESP_LOGI(TAG, "PY32 LED ring configured: count=%u", count);
+    }
+    return err;
+}
+
 static esp_err_t set_bit_locked(uint8_t reg, uint8_t bit, bool enabled)
 {
     uint8_t value = 0;
@@ -101,6 +115,8 @@ esp_err_t py32_init(i2c_port_t port)
     s_led_available = false;
     s_servo_power_enabled = false;
     s_failures = 0;
+    s_last_led_write_us = 0;
+    s_last_led_retry_us = 0;
 
     uint8_t version = 0;
     esp_err_t err = ESP_FAIL;
@@ -119,14 +135,13 @@ esp_err_t py32_init(i2c_port_t port)
         return ESP_ERR_NOT_FOUND;
     }
 
-    uint8_t count = CORES3_PY32_LED_COUNT;
-    err = write_reg_locked(PY32_REG_LED_CFG, count);
+    err = configure_led_locked();
     xSemaphoreGive(s_lock);
 
     if (err != ESP_OK) {
         s_led_available = false;
         ESP_LOGW(TAG, "PY32 LED config failed: %s", esp_err_to_name(err));
-        ESP_LOGI(TAG, "PY32 initialized at 0x%02X, version=0x%02X; LED ring unavailable", CORES3_PY32_I2C_ADDR, version);
+        ESP_LOGI(TAG, "PY32 initialized at 0x%02X, version=0x%02X; LED ring will retry on later writes", CORES3_PY32_I2C_ADDR, version);
         return ESP_OK;
     }
 
@@ -196,7 +211,7 @@ esp_err_t py32_set_servo_power(bool enabled)
 
 esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b, bool force)
 {
-    if (!py32_led_is_available()) {
+    if (!py32_is_available()) {
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -209,6 +224,18 @@ esp_err_t py32_write_led_rgb(uint8_t r, uint8_t g, uint8_t b, bool force)
 
     xSemaphoreTake(s_lock, portMAX_DELAY);
     int64_t now_us = esp_timer_get_time();
+    if (!s_led_available) {
+        if (!force && s_last_led_retry_us != 0 && now_us - s_last_led_retry_us < PY32_LED_RETRY_INTERVAL_US) {
+            xSemaphoreGive(s_lock);
+            return ESP_ERR_NOT_FOUND;
+        }
+        s_last_led_retry_us = now_us;
+        esp_err_t cfg_err = configure_led_locked();
+        if (cfg_err != ESP_OK) {
+            xSemaphoreGive(s_lock);
+            return cfg_err;
+        }
+    }
     if (!force && s_last_led_write_us != 0 && now_us - s_last_led_write_us < 50000) {
         xSemaphoreGive(s_lock);
         return ESP_OK;

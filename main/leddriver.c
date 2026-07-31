@@ -44,10 +44,11 @@ static led_write_result_t led_write_raw(uint8_t r, uint8_t g, uint8_t b, bool fo
         }
     }
 
-    if (result.py32_led_available) {
+    if (py32_is_available()) {
         esp_err_t py32_err = py32_write_led_rgb(r, g, b, force);
+        result.py32_led_available = py32_led_is_available();
         result.py32_led_write_ok = py32_err == ESP_OK;
-        if (py32_err != ESP_OK) {
+        if (py32_err != ESP_OK && (force || py32_err != ESP_ERR_NOT_FOUND)) {
             ESP_LOGW(TAG, "PY32 LED write failed: %s", esp_err_to_name(py32_err));
         }
     }
@@ -94,7 +95,7 @@ static void led_task(void *arg)
                 wrote_solid = true;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(25));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
 
@@ -142,13 +143,15 @@ esp_err_t led_init(void)
         s_encoder = NULL;
     }
 
-    if (rmt_err != ESP_OK && !py32_led_is_available()) {
+    if (rmt_err != ESP_OK && !py32_is_available()) {
         return rmt_err;
     }
     led_set_color(0, 0, 0);
     xTaskCreate(led_task, "led_task", 3072, NULL, 5, NULL);
-    ESP_LOGI(TAG, "SK6812 LED initialized on GPIO%d; PY32 ring %s",
-             CORES3_LED_GPIO, py32_led_is_available() ? "enabled" : "disabled");
+    ESP_LOGI(TAG, "SK6812 LED initialized on GPIO%d; PY32 chip %s; PY32 ring %s",
+             CORES3_LED_GPIO,
+             py32_is_available() ? "available" : "missing",
+             py32_led_is_available() ? "configured" : "pending");
     return ESP_OK;
 }
 

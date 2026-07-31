@@ -276,7 +276,7 @@ CoreS3 responds immediately with `{"status":"ok","action":"self_test","value":"s
 {"event":"self_test","display":true,"led":true,"led_gpio_write_ok":true,"py32_led_write_ok":false,"py32_led_available":false,"motion_available":false,"motion_result":"motion unavailable","audio_out_available":false,"audio_result":"audio unavailable"}
 ```
 
-Use this event to separate protocol readiness from physical hardware readiness. `led` is true only when at least one LED backend reports a successful write; `led_gpio_write_ok`, `py32_led_write_ok`, and `py32_led_available` expose the backend-specific diagnostics.
+Use this event to separate protocol readiness from physical hardware readiness. When PY32 is present, `led` follows `py32_led_write_ok` because the StackChan ring is on PY32; if PY32 is absent, `led` falls back to any working GPIO LED backend. `led_gpio_write_ok`, `py32_led_write_ok`, and `py32_led_available` expose the backend-specific diagnostics.
 
 ### Heartbeat Field Stability
 

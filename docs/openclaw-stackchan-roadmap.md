@@ -47,6 +47,7 @@ Current hardware diagnosis:
 - HtSz functional extraction and failure analysis lives in `docs/hardware-porting/htsz-functional-extract-and-failure-analysis.md`.
 - User-side feedback indicates network/session can come up, but LED ring, servo motion, body-touch input, and speaker output are not yet reliable on real hardware.
 - Firmware now separates PY32, PY32 LED, servo VM_EN, servo ping, servo write, SI12T body touch, motion, and audio diagnostics in hello/heartbeat/self-test/status outputs.
+- PY32 LED ring configuration can retry after startup, so early power timing failures do not permanently disable the ring.
 - Motion/servo capability is reported true only after verified servo detection; VM_EN-only state remains diagnostic.
 - SI12T head/body touch has a pure-C optional driver; it reports available only after the 12-second calibration and first state read succeed, and still requires true CoreS3 validation.
 
@@ -158,6 +159,7 @@ Acceptance:
 
 ## Change Log
 
+- 2026-07-31: Added PY32 LED late-retry behavior after hardware feedback showed the LED ring can stay dark despite the rest of the session working.
 - 2026-06-30: Implemented hardware-diagnostics repair pass: PY32 pre-wait, layered PY32/LED/servo diagnostics, optional SI12T head/body touch driver, and updated protocol docs.
 - 2026-06-30: Added HtSz functional extraction and current failure analysis after hardware feedback showed body-output issues still remain.
 - 2026-06-26: Set this roadmap as the single project-level progress view; recorded completed first governance pass for Agent rules, Bridge auto-reaction centralization, and firmware visual-service extraction.
